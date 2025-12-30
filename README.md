@@ -11,6 +11,7 @@
 - **自然语言输入** - 用中文、英文等自然语言描述需求，自动生成对应命令
 - **命令生成** - 将自然语言转换为可执行的 shell 命令
 - **思考过程展示** - 显示命令生成逻辑，便于学习理解
+- **对话记忆** - 记住最近的对话历史，支持连续提问和上下文理解
 - **跨平台支持** - 支持 Linux、macOS、Windows
 - **配置文件** - 支持 `~/.glm-cmd/config.ini` 配置
 - **一键执行** - 生成后确认即可执行
@@ -126,6 +127,13 @@ model="glm-4.7"           # 标准模型
 # model="glm-4-flash"     # 快速模型
 # model="glm-4-air"       # 轻量级模型
 
+# 用户自定义提示词（前置到每次输入）
+# user_prompt="请用最简洁的命令"
+
+# 对话记忆功能
+memory_enabled=true       # 启用对话记忆（默认false）
+memory_rounds=5           # 记住最近5轮对话（默认5）
+
 # 温度参数（0.0-2.0，默认0.7）
 temperature=0.7
 
@@ -210,6 +218,65 @@ glm-cmd "删除所有已合并的本地分支"
 ```
 
 ## 高级功能
+
+### 对话记忆功能
+
+对话记忆功能允许 GLM-CMD 记住最近的对话历史，支持连续提问和上下文理解。
+
+**启用记忆功能：**
+
+在配置文件中添加：
+```ini
+memory_enabled=true
+memory_rounds=5
+```
+
+**使用示例：**
+
+```bash
+# 第一次查询
+glm-cmd "列出当前目录的文件"
+# AI 生成: ls
+
+# 第二次查询（AI 记住了上一次的对话）
+glm-cmd "只看前3个"
+# AI 理解上下文，生成: ls | head -3
+
+# 第三次查询
+glm-cmd "按文件大小排序"
+# AI 继续理解上下文，生成: ls | sort -k5 -hr
+```
+
+**工作原理：**
+
+1. **持久化存储**: 对话历史保存在 `~/.glm-cmd/history.json`
+2. **FIFO 机制**: 超过设定轮数时自动删除最旧的记录
+3. **API 集成**: 历史记录作为标准的 messages 数组发送给 AI
+4. **上下文理解**: AI 能理解指代关系（如"它"、"那个"）
+
+**查看调试信息：**
+
+```bash
+glm-cmd -V "列出文件"
+```
+
+输出：
+```
+[DEBUG] Conversation History: 1 rounds
+[DEBUG] Adding 1 rounds of conversation history to API request
+[DEBUG] History[0]: User='列出当前目录的文件'
+```
+
+**配置参数：**
+
+- `memory_enabled`: 是否启用记忆功能（`true`/`false`）
+- `memory_rounds`: 保存的对话轮数（默认 5）
+
+**注意事项：**
+
+- 记忆功能只在 API 请求成功后保存
+- 历史文件格式为标准 JSON，可手动查看或编辑
+- 使用 verbose 模式可以查看记忆使用情况
 
 ### 查看系统信息
 
@@ -393,6 +460,9 @@ endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 api_key="sk.your_actual_api_key_here"
 endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 model="glm-4.7"
+user_prompt="请用最简洁的命令"
+memory_enabled=true
+memory_rounds=5
 temperature=0.7
 max_tokens=2048
 timeout=30

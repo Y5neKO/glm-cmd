@@ -21,6 +21,8 @@ Config* config_create(void) {
     cfg->model = strdup(DEFAULT_MODEL);
     cfg->endpoint = NULL;  /* 端点必须通过配置文件或环境变量设置 */
     cfg->user_prompt = NULL;
+    cfg->memory_enabled = DEFAULT_MEMORY_ENABLED;
+    cfg->memory_rounds = DEFAULT_MEMORY_ROUNDS;
     cfg->temperature = DEFAULT_TEMP;
     cfg->max_tokens = DEFAULT_MAX_TOKENS;
     cfg->timeout = DEFAULT_TIMEOUT;
@@ -61,6 +63,9 @@ static void copy_from_config_file(Config *cfg, const ConfigFile *file_cfg) {
         if (cfg->user_prompt) free(cfg->user_prompt);
         cfg->user_prompt = strdup(file_cfg->user_prompt);
     }
+
+    cfg->memory_enabled = file_cfg->memory_enabled;
+    cfg->memory_rounds = file_cfg->memory_rounds;
 
     cfg->temperature = file_cfg->temperature;
     cfg->max_tokens = file_cfg->max_tokens;

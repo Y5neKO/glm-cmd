@@ -124,6 +124,7 @@ char* build_system_prompt(const SystemInfo *sys_info) {
 }
 
 char* build_request_body(const Config *cfg, const SystemInfo *sys_info,
+                         const ConversationHistory *history,
                          const char *user_input) {
     cJSON *json = cJSON_CreateObject();
     if (!json) {
@@ -156,6 +157,34 @@ char* build_request_body(const Config *cfg, const SystemInfo *sys_info,
 
     cJSON_AddStringToObject(system_msg, "content", system_prompt);
     cJSON_AddItemToArray(messages, system_msg);
+
+    /* 添加对话历史 (如果有) */
+    if (history && history->current_count > 0) {
+        if (cfg->verbose) {
+            printf("[DEBUG] Adding %d rounds of conversation history to API request\n", history->current_count);
+        }
+        for (int i = 0; i < history->current_count; i++) {
+            /* 用户消息 */
+            cJSON *hist_user_msg = cJSON_CreateObject();
+            cJSON_AddStringToObject(hist_user_msg, "role", "user");
+            cJSON_AddStringToObject(hist_user_msg, "content", history->rounds[i].user_input);
+            cJSON_AddItemToArray(messages, hist_user_msg);
+
+            /* 助手消息 */
+            cJSON *hist_assist_msg = cJSON_CreateObject();
+            cJSON_AddStringToObject(hist_assist_msg, "role", "assistant");
+            cJSON_AddStringToObject(hist_assist_msg, "content", history->rounds[i].assistant_response);
+            cJSON_AddItemToArray(messages, hist_assist_msg);
+
+            if (cfg->verbose) {
+                printf("[DEBUG] History[%d]: User='%s'\n", i, history->rounds[i].user_input);
+            }
+        }
+    } else {
+        if (cfg->verbose) {
+            printf("[DEBUG] No conversation history to add\n");
+        }
+    }
 
     /* User message */
     cJSON *user_msg = cJSON_CreateObject();
@@ -202,6 +231,7 @@ char* build_request_body(const Config *cfg, const SystemInfo *sys_info,
 }
 
 bool api_send_request(const Config *cfg, const SystemInfo *sys_info,
+                      const ConversationHistory *history,
                       const char *user_input, ApiResponse *response) {
     if (!cfg || !user_input || !response) {
         fprintf(stderr, "Error: Invalid parameters\n");
@@ -227,7 +257,7 @@ bool api_send_request(const Config *cfg, const SystemInfo *sys_info,
     snprintf(url, sizeof(url), "%s/chat/completions", cfg->endpoint);
 
     /* 构建请求体 */
-    char *request_body = build_request_body(cfg, sys_info, user_input);
+    char *request_body = build_request_body(cfg, sys_info, history, user_input);
     if (!request_body) {
         fprintf(stderr, "Error: Failed to build request body\n");
         response->error_message = strdup("Failed to build request body");

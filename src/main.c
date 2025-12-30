@@ -12,7 +12,19 @@
 #include "config_init.h"
 #include "system_info.h"
 #include "api.h"
+#include "history.h"
 #include "ui.h"
+
+#ifdef _WIN32
+    #include <direct.h>
+    #include <shlobj.h>
+    #define mkdir_cross(path) _mkdir(path)
+#else
+    #include <unistd.h>
+    #include <pwd.h>
+    #include <sys/stat.h>
+    #define mkdir_cross(path) mkdir(path, 0755)
+#endif
 
 #define VERSION "1.0.0"
 
@@ -121,6 +133,37 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Warning: Failed to detect some system information\n");
     }
 
+    /* 创建对话历史管理器（如果启用） */
+    ConversationHistory *history = NULL;
+    if (cfg->memory_enabled) {
+        /* 获取配置目录路径 */
+        const char *home = NULL;
+        char config_dir[512];
+
+#ifdef _WIN32
+        char home_dir[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_PROFILE, NULL, 0, home_dir))) {
+            home = home_dir;
+        }
+#else
+        home = getenv("HOME");
+        if (!home) {
+            struct passwd *pw = getpwuid(getuid());
+            if (pw) home = pw->pw_dir;
+        }
+#endif
+
+        if (home) {
+            snprintf(config_dir, sizeof(config_dir), "%s/.glm-cmd", home);
+            history = history_create(config_dir, cfg->memory_rounds);
+            if (history) {
+                history_load(history);
+            } else {
+                fprintf(stderr, "Warning: Failed to create conversation history\n");
+            }
+        }
+    }
+
     /* 显示系统信息 */
     if (show_info) {
         print_banner();
@@ -129,6 +172,7 @@ int main(int argc, char *argv[]) {
         config_print(cfg);
         system_info_destroy(sys_info);
         config_destroy(cfg);
+        if (history) history_destroy(history);
         return 0;
     }
 
@@ -221,7 +265,12 @@ int main(int argc, char *argv[]) {
 
     printf("%s🤔 Processing your request...%s\n\n", COLOR_BLUE, COLOR_RESET);
 
-    bool success = api_send_request(cfg, sys_info, user_input, response);
+    /* 调试: 显示历史状态 */
+    if (cfg->verbose && history) {
+        printf("%s[DEBUG] Conversation History: %d rounds%s\n", COLOR_YELLOW, history->current_count, COLOR_RESET);
+    }
+
+    bool success = api_send_request(cfg, sys_info, history, user_input, response);
 
     if (!success) {
         printf("\n");
@@ -233,8 +282,31 @@ int main(int argc, char *argv[]) {
         api_response_destroy(response);
         free(user_input);
         system_info_destroy(sys_info);
+        if (history) history_destroy(history);
         config_destroy(cfg);
         return 1;
+    }
+
+    /* 保存对话到历史（如果启用） */
+    if (history && response->success && response->command) {
+        /* 构建完整的响应文本（包含思考过程和命令） */
+        char *full_response = NULL;
+        if (response->thinking_process && strlen(response->thinking_process) > 0) {
+            size_t len = strlen(response->thinking_process) + strlen(response->command) + 20;
+            full_response = (char *)malloc(len);
+            if (full_response) {
+                snprintf(full_response, len, "%s\n\nCommand: %s",
+                        response->thinking_process, response->command);
+            }
+        } else {
+            full_response = strdup(response->command);
+        }
+
+        if (full_response) {
+            history_add_round(history, user_input, full_response);
+            history_save(history);
+            free(full_response);
+        }
     }
 
     /* 显示结果 */
@@ -270,6 +342,7 @@ int main(int argc, char *argv[]) {
         api_response_destroy(response);
         free(user_input);
         system_info_destroy(sys_info);
+        if (history) history_destroy(history);
         config_destroy(cfg);
         return 1;
     }
@@ -278,6 +351,7 @@ int main(int argc, char *argv[]) {
     api_response_destroy(response);
     free(user_input);
     system_info_destroy(sys_info);
+    if (history) history_destroy(history);
     config_destroy(cfg);
 
     return 0;

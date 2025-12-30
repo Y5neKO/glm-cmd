@@ -73,6 +73,8 @@ ConfigFile* config_file_create(void) {
     cfg->model = NULL;
     cfg->endpoint = NULL;
     cfg->user_prompt = NULL;
+    cfg->memory_enabled = false;
+    cfg->memory_rounds = 5;
     cfg->temperature = 0.7;
     cfg->max_tokens = 2048;
     cfg->timeout = 30;
@@ -195,6 +197,15 @@ bool config_file_read(const char *path, ConfigFile *cfg) {
                 if (cfg->user_prompt) free(cfg->user_prompt);
                 cfg->user_prompt = strdup(unquoted_value);
             }
+            /* Memory Enabled */
+            else if (strcmp(key, "memory_enabled") == 0) {
+                cfg->memory_enabled = (strcmp(unquoted_value, "true") == 0 ||
+                                      strcmp(unquoted_value, "1") == 0);
+            }
+            /* Memory Rounds */
+            else if (strcmp(key, "memory_rounds") == 0) {
+                cfg->memory_rounds = atoi(unquoted_value);
+            }
             /* Temperature */
             else if (strcmp(key, "temperature") == 0) {
                 cfg->temperature = atof(unquoted_value);
@@ -253,6 +264,14 @@ bool config_file_write(const char *path, const ConfigFile *cfg) {
         fprintf(fp, "user_prompt=\"%s\"\n", cfg->user_prompt);
         fprintf(fp, "\n");
     }
+
+    /* Memory settings */
+    fprintf(fp, "# Conversation memory settings\n");
+    fprintf(fp, "# memory_enabled: Enable/disable conversation history memory\n");
+    fprintf(fp, "# memory_rounds: Number of recent conversation rounds to remember (1-20)\n");
+    fprintf(fp, "memory_enabled=%s\n", cfg->memory_enabled ? "true" : "false");
+    fprintf(fp, "memory_rounds=%d\n", cfg->memory_rounds);
+    fprintf(fp, "\n");
 
     fprintf(fp, "# Temperature parameter (0.0 - 2.0, default: 0.7)\n");
     fprintf(fp, "temperature=%.1f\n", cfg->temperature);

@@ -11,6 +11,7 @@ Natural Language to Command Tool - Automatically generate shell commands by desc
 - **Natural Language Input** - Describe requirements in Chinese, English, or other natural languages, automatically generate corresponding commands
 - **Command Generation** - Convert natural language into executable shell commands
 - **Thought Process Display** - Show command generation logic for easy learning and understanding
+- **Conversation Memory** - Remember recent conversation history, support continuous queries and context understanding
 - **Cross-Platform Support** - Support Linux, macOS, Windows
 - **Configuration File** - Support `~/.glm-cmd/config.ini` configuration
 - **One-Click Execution** - Confirm and execute generated commands
@@ -125,6 +126,13 @@ model="glm-4.7"           # Standard model
 # model="glm-4-flash"     # Fast model
 # model="glm-4-air"       # Lightweight model
 
+# User custom prompt (prefix to each input)
+# user_prompt="Use the most concise command"
+
+# Conversation memory feature
+memory_enabled=true       # Enable conversation memory (default false)
+memory_rounds=5           # Remember last 5 rounds (default 5)
+
 # Temperature parameter (0.0-2.0, default 0.7)
 temperature=0.7
 
@@ -209,6 +217,65 @@ glm-cmd "delete all merged local branches"
 ```
 
 ## Advanced Features
+
+### Conversation Memory Feature
+
+The conversation memory feature allows GLM-CMD to remember recent conversation history, supporting continuous queries and context understanding.
+
+**Enable Memory Feature:**
+
+Add to configuration file:
+```ini
+memory_enabled=true
+memory_rounds=5
+```
+
+**Usage Example:**
+
+```bash
+# First query
+glm-cmd "list files in current directory"
+# AI generates: ls
+
+# Second query (AI remembers the previous conversation)
+glm-cmd "show only first 3"
+# AI understands context, generates: ls | head -3
+
+# Third query
+glm-cmd "sort by file size"
+# AI continues understanding context, generates: ls -S
+```
+
+**How It Works:**
+
+1. **Persistent Storage**: Conversation history saved in `~/.glm-cmd/history.json`
+2. **FIFO Mechanism**: Automatically removes oldest records when limit is reached
+3. **API Integration**: History sent as standard messages array to AI
+4. **Context Understanding**: AI can understand references (like "it", "that")
+
+**View Debug Info:**
+
+```bash
+glm-cmd -V "list files"
+```
+
+Output:
+```
+[DEBUG] Conversation History: 1 rounds
+[DEBUG] Adding 1 rounds of conversation history to API request
+[DEBUG] History[0]: User='list files in current directory'
+```
+
+**Configuration Parameters:**
+
+- `memory_enabled`: Enable memory feature (`true`/`false`)
+- `memory_rounds`: Number of conversation rounds to save (default 5)
+
+**Notes:**
+
+- Memory is saved only after successful API requests
+- History file format is standard JSON, can be viewed or edited manually
+- Use verbose mode to see memory usage
 
 ### View System Information
 
@@ -392,6 +459,9 @@ endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 api_key="sk.your_actual_api_key_here"
 endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 model="glm-4.7"
+user_prompt="Use the most concise command"
+memory_enabled=true
+memory_rounds=5
 temperature=0.7
 max_tokens=2048
 timeout=30

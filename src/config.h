@@ -13,6 +13,8 @@
 #define DEFAULT_TEMP 0.7
 #define DEFAULT_MAX_TOKENS 2048
 #define DEFAULT_TIMEOUT 30
+#define DEFAULT_MEMORY_ENABLED false
+#define DEFAULT_MEMORY_ROUNDS 5
 
 /* 常用端点 */
 #define ENDPOINT_CODING "https://open.bigmodel.cn/api/coding/paas/v4"
@@ -24,6 +26,8 @@ typedef struct {
     char *model;
     char *endpoint;
     char *user_prompt;  /* 用户自定义提示词（前置） */
+    bool memory_enabled;  /* 是否启用对话记忆 */
+    int memory_rounds;   /* 记忆的对话轮数 */
     double temperature;
     int max_tokens;
     int timeout;

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #ifdef _WIN32
     #include <direct.h>
@@ -67,6 +68,7 @@ static bool read_input(const char *prompt, char *buffer, size_t buffer_size, boo
 
 bool config_init_with_values(const char *api_key, const char *endpoint,
                               const char *model, const char *user_prompt,
+                              bool memory_enabled, int memory_rounds,
                               double temperature, int max_tokens, int timeout) {
     char config_path[CONFIG_MAX_PATH];
 
@@ -110,6 +112,8 @@ bool config_init_with_values(const char *api_key, const char *endpoint,
     cfg->endpoint = strdup(endpoint);
     cfg->model = strdup(model ? model : "glm-4.7");
     cfg->user_prompt = user_prompt ? strdup(user_prompt) : NULL;
+    cfg->memory_enabled = memory_enabled;
+    cfg->memory_rounds = memory_rounds;
     cfg->temperature = temperature;
     cfg->max_tokens = max_tokens;
     cfg->timeout = timeout;
@@ -144,6 +148,8 @@ bool config_init_interactive(void) {
     char endpoint[256];
     char model[64] = "glm-4.7";
     char user_prompt[512] = "";
+    bool memory_enabled = false;
+    int memory_rounds = 5;
     char temp_input[16];
     double temperature = 0.7;
     int max_tokens = 2048;
@@ -389,6 +395,70 @@ bool config_init_interactive(void) {
 
     printf("\n");
 
+    /* 对话记忆功能 */
+    printf("─────────────────────────────────────────\n");
+    printf("Conversation Memory\n");
+    printf("─────────────────────────────────────────\n");
+    printf("Enable conversation memory to remember recent conversations.\n");
+    printf("This helps the AI maintain context across multiple requests.\n");
+    printf("\n");
+
+    while (1) {
+        if (!read_input("Enable conversation memory? (y/N, default: N): ",
+                        temp_input, sizeof(temp_input), true)) {
+            print_error("Failed to read input");
+            return false;
+        }
+
+        if (strlen(temp_input) == 0) {
+            memory_enabled = false;
+            printf("Memory disabled.\n");
+            break;
+        }
+
+        /* 转换为小写检查 */
+        char c = tolower(temp_input[0]);
+        if (c == 'y') {
+            memory_enabled = true;
+            printf("Memory enabled.\n");
+            break;
+        } else if (c == 'n') {
+            memory_enabled = false;
+            printf("Memory disabled.\n");
+            break;
+        }
+
+        print_warning("Please enter 'y' or 'n'.\n");
+    }
+
+    /* 如果启用记忆,询问记忆轮数 */
+    if (memory_enabled) {
+        printf("\n");
+        while (1) {
+            if (!read_input("Number of conversation rounds to remember (1-20, default: 5): ",
+                            temp_input, sizeof(temp_input), true)) {
+                print_error("Failed to read input");
+                return false;
+            }
+
+            if (strlen(temp_input) == 0) {
+                memory_rounds = 5;
+                printf("Using: 5 rounds (default)\n");
+                break;
+            }
+
+            memory_rounds = atoi(temp_input);
+            if (memory_rounds >= 1 && memory_rounds <= 20) {
+                printf("Using: %d rounds\n", memory_rounds);
+                break;
+            }
+
+            print_warning("Invalid value. Please enter a number between 1 and 20.\n");
+        }
+    }
+
+    printf("\n");
+
     /* 确认配置 */
     printf("Configuration Summary:\n");
     printf("─────────────────────────────────────────\n");
@@ -397,6 +467,10 @@ bool config_init_interactive(void) {
     printf("Model:         %s\n", model);
     if (strlen(user_prompt) > 0) {
         printf("User Prompt:   %s\n", user_prompt);
+    }
+    printf("Memory:        %s\n", memory_enabled ? "Enabled" : "Disabled");
+    if (memory_enabled) {
+        printf("Memory Rounds: %d\n", memory_rounds);
     }
     printf("Temperature:   %.1f\n", temperature);
     printf("Max Tokens:    %d\n", max_tokens);
@@ -411,5 +485,6 @@ bool config_init_interactive(void) {
     /* 保存配置 */
     return config_init_with_values(api_key, endpoint, model,
                                     strlen(user_prompt) > 0 ? user_prompt : NULL,
+                                    memory_enabled, memory_rounds,
                                     temperature, max_tokens, timeout);
 }
