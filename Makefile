@@ -13,7 +13,7 @@ endif
 
 # 编译器和选项
 CC ?= gcc
-BASE_CFLAGS = -Wall -Wextra -O2 -std=c11
+BASE_CFLAGS = -Wall -Wextra -O2 -std=c11 -D_DEFAULT_SOURCE
 LDFLAGS ?=
 
 # 目标文件

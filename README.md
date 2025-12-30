@@ -51,7 +51,7 @@ git clone https://github.com/Y5neKO/glm-cmd.git
 cd glm-cmd
 
 # 编译
-./build.sh
+make
 
 # 安装（可选）
 sudo make install

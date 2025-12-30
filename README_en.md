@@ -51,7 +51,7 @@ git clone https://github.com/Y5neKO/glm-cmd.git
 cd glm-cmd
 
 # Compile
-./build.sh
+make
 
 # Install (optional)
 sudo make install
