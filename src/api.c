@@ -104,8 +104,11 @@ char* build_system_prompt(const SystemInfo *sys_info) {
         "- 对于复杂操作，提供带注释的版本\n";
 
     size_t prompt_len = strlen(base_prompt);
+    size_t sys_context_len = 0;
+
     if (sys_context) {
-        prompt_len += strlen(sys_context) + 1;
+        sys_context_len = strlen(sys_context);
+        prompt_len += sys_context_len + 1;  /* +1 for newline */
     }
 
     char *full_prompt = (char *)malloc(prompt_len + 1);
@@ -114,9 +117,13 @@ char* build_system_prompt(const SystemInfo *sys_info) {
         return NULL;
     }
 
-    snprintf(full_prompt, prompt_len + 1, "%s\n%s",
-             sys_context ? sys_context : "",
-             base_prompt);
+    if (sys_context) {
+        snprintf(full_prompt, prompt_len + 1, "%s\n%s",
+                 sys_context, base_prompt);
+    } else {
+        snprintf(full_prompt, prompt_len + 1, "%s",
+                 base_prompt);
+    }
 
     if (sys_context) free(sys_context);
 
@@ -553,7 +560,7 @@ static void process_sse_chunk(const char *chunk, size_t chunk_size,
     const char *json_start = chunk + 6;
     const char *json_end = memchr(json_start, '\n', chunk_size - 6);
 
-    size_t json_len = json_end ? (json_end - json_start) : (chunk_size - 6);
+    size_t json_len = json_end ? (size_t)(json_end - json_start) : (chunk_size - 6);
 
     /* 检查 [DONE] 标记 */
     if (json_len >= 6 && strncmp(json_start, "[DONE]", 6) == 0) {
