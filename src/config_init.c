@@ -69,7 +69,8 @@ static bool read_input(const char *prompt, char *buffer, size_t buffer_size, boo
 bool config_init_with_values(const char *api_key, const char *endpoint,
                               const char *model, const char *user_prompt,
                               bool memory_enabled, int memory_rounds,
-                              double temperature, int max_tokens, int timeout) {
+                              bool stream_enabled, double temperature,
+                              int max_tokens, int timeout) {
     char config_path[CONFIG_MAX_PATH];
 
     /* 获取配置文件路径 */
@@ -114,6 +115,7 @@ bool config_init_with_values(const char *api_key, const char *endpoint,
     cfg->user_prompt = user_prompt ? strdup(user_prompt) : NULL;
     cfg->memory_enabled = memory_enabled;
     cfg->memory_rounds = memory_rounds;
+    cfg->stream_enabled = stream_enabled;
     cfg->temperature = temperature;
     cfg->max_tokens = max_tokens;
     cfg->timeout = timeout;
@@ -150,6 +152,7 @@ bool config_init_interactive(void) {
     char user_prompt[512] = "";
     bool memory_enabled = false;
     int memory_rounds = 5;
+    bool stream_enabled = true;
     char temp_input[16];
     double temperature = 0.7;
     int max_tokens = 2048;
@@ -459,6 +462,44 @@ bool config_init_interactive(void) {
 
     printf("\n");
 
+    /* 流式输出功能 */
+    printf("─────────────────────────────────────────\n");
+    printf("Streaming Output\n");
+    printf("─────────────────────────────────────────\n");
+    printf("Enable streaming output to see responses in real-time.\n");
+    printf("This displays the AI's thinking process as it generates.\n");
+    printf("\n");
+
+    while (1) {
+        if (!read_input("Enable streaming output? (Y/n, default: Y): ",
+                        temp_input, sizeof(temp_input), true)) {
+            print_error("Failed to read input");
+            return false;
+        }
+
+        if (strlen(temp_input) == 0) {
+            stream_enabled = true;
+            printf("Streaming enabled.\n");
+            break;
+        }
+
+        /* 转换为小写检查 */
+        char c = tolower(temp_input[0]);
+        if (c == 'y') {
+            stream_enabled = true;
+            printf("Streaming enabled.\n");
+            break;
+        } else if (c == 'n') {
+            stream_enabled = false;
+            printf("Streaming disabled.\n");
+            break;
+        }
+
+        print_warning("Please enter 'y' or 'n'.\n");
+    }
+
+    printf("\n");
+
     /* 确认配置 */
     printf("Configuration Summary:\n");
     printf("─────────────────────────────────────────\n");
@@ -472,6 +513,7 @@ bool config_init_interactive(void) {
     if (memory_enabled) {
         printf("Memory Rounds: %d\n", memory_rounds);
     }
+    printf("Streaming:     %s\n", stream_enabled ? "Enabled" : "Disabled");
     printf("Temperature:   %.1f\n", temperature);
     printf("Max Tokens:    %d\n", max_tokens);
     printf("Timeout:       %d seconds\n", timeout);
@@ -486,5 +528,5 @@ bool config_init_interactive(void) {
     return config_init_with_values(api_key, endpoint, model,
                                     strlen(user_prompt) > 0 ? user_prompt : NULL,
                                     memory_enabled, memory_rounds,
-                                    temperature, max_tokens, timeout);
+                                    stream_enabled, temperature, max_tokens, timeout);
 }

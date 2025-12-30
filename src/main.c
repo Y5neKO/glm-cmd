@@ -28,6 +28,68 @@
 
 #define VERSION "1.0.0"
 
+/* 流式输出数据结构 */
+typedef struct {
+    char *buffer;           /* 累积的响应内容 */
+    size_t buffer_size;     /* 缓冲区大小 */
+    size_t buffer_pos;      /* 当前位置 */
+    bool is_streaming;      /* 是否正在流式输出 */
+    FILE *tty;              /* 终端文件描述符 */
+} StreamUserData;
+
+/* 流式回调函数 */
+static void stream_callback(const char *content, bool is_done, void *userdata) {
+    StreamUserData *data = (StreamUserData *)userdata;
+
+    if (is_done) {
+        /* 流式输出结束 */
+        if (data->is_streaming) {
+            printf("\n\n");
+            data->is_streaming = false;
+        }
+        return;
+    }
+
+    /* 初始化缓冲区 */
+    if (data->buffer == NULL) {
+        data->buffer_size = 4096;
+        data->buffer = (char *)malloc(data->buffer_size);
+        if (!data->buffer) {
+            fprintf(stderr, "Error: Failed to allocate stream buffer\n");
+            return;
+        }
+        data->buffer_pos = 0;
+        data->buffer[0] = '\0';
+    }
+
+    /* 扩展缓冲区（如果需要） */
+    size_t content_len = strlen(content);
+    while (data->buffer_pos + content_len + 1 >= data->buffer_size) {
+        size_t new_size = data->buffer_size * 2;
+        char *new_buffer = (char *)realloc(data->buffer, new_size);
+        if (!new_buffer) {
+            fprintf(stderr, "Error: Failed to realloc stream buffer\n");
+            return;
+        }
+        data->buffer = new_buffer;
+        data->buffer_size = new_size;
+    }
+
+    /* 追加内容到缓冲区 */
+    strcat(data->buffer + data->buffer_pos, content);
+    data->buffer_pos += content_len;
+
+    /* 实时显示内容（使用 \r 覆盖当前行） */
+    if (!data->is_streaming) {
+        printf("%s💭 AI Response:%s\n", COLOR_BLUE, COLOR_RESET);
+        data->is_streaming = true;
+    }
+
+    /* 直接输出内容（流式显示，使用灰色） */
+    printf("%s%s%s", COLOR_GRAY, content, COLOR_RESET);
+    fflush(stdout);
+}
+
 /* 打印版本信息 */
 static void print_version(void) {
     printf("GLM-CMD version %s\n", VERSION);
@@ -44,21 +106,25 @@ int main(int argc, char *argv[]) {
     bool show_help = false;
     bool show_version = false;
     bool show_info = false;
+    bool show_history = false;
+    bool clear_history = false;
     bool run_init = false;
     char *user_input = NULL;
 
     /* 命令行选项 */
     static struct option long_options[] = {
-        {"help",      no_argument,       0, 'h'},
-        {"version",   no_argument,       0, 'v'},
-        {"verbose",   no_argument,       0, 'V'},
-        {"info",      no_argument,       0, 'i'},
-        {"init",      no_argument,       0, 'I'},
+        {"help",          no_argument,       0, 'h'},
+        {"version",       no_argument,       0, 'v'},
+        {"verbose",       no_argument,       0, 'V'},
+        {"info",          no_argument,       0, 'i'},
+        {"init",          no_argument,       0, 'I'},
+        {"history",       no_argument,       0,  'H'},
+        {"clear-history", no_argument,       0,  'c'},
         {0, 0, 0, 0}
     };
 
     /* 解析命令行参数 */
-    while ((opt = getopt_long(argc, argv, "hvViI", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvViIHc", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 show_help = true;
@@ -73,6 +139,12 @@ int main(int argc, char *argv[]) {
                 break;
             case 'I':
                 run_init = true;
+                break;
+            case 'H':
+                show_history = true;
+                break;
+            case 'c':
+                clear_history = true;
                 break;
             default:
                 print_usage(argv[0]);
@@ -97,6 +169,77 @@ int main(int argc, char *argv[]) {
         if (!config_init_interactive()) {
             return 1;
         }
+        return 0;
+    }
+
+    /* 显示历史记录 */
+    if (show_history) {
+        /* 创建配置 */
+        Config *cfg = config_create();
+        if (!cfg) {
+            fprintf(stderr, "Error: Failed to create configuration\n");
+            return 1;
+        }
+
+        /* 加载配置 */
+        if (!config_load(cfg)) {
+            config_destroy(cfg);
+            return 1;
+        }
+
+        /* 创建历史管理器 */
+        if (cfg->memory_enabled) {
+            char config_dir[512];
+            const char *home = getenv("HOME");
+            if (home) {
+                snprintf(config_dir, sizeof(config_dir), "%s/.glm-cmd", home);
+                ConversationHistory *history = history_create(config_dir, cfg->memory_rounds);
+                if (history) {
+                    history_load(history);
+                    printf("Conversation History (%d rounds):\n", history->current_count);
+                    printf("========================================\n\n");
+                    history_print(history);
+                    history_destroy(history);
+                }
+            }
+        } else {
+            printf("Conversation memory is disabled.\n");
+            printf("Enable it by setting memory_enabled=true in config.ini\n");
+        }
+
+        config_destroy(cfg);
+        return 0;
+    }
+
+    /* 清除历史记录 */
+    if (clear_history) {
+        /* 创建配置 */
+        Config *cfg = config_create();
+        if (!cfg) {
+            fprintf(stderr, "Error: Failed to create configuration\n");
+            return 1;
+        }
+
+        /* 加载配置 */
+        if (!config_load(cfg)) {
+            config_destroy(cfg);
+            return 1;
+        }
+
+        /* 创建历史管理器并清除 */
+        char config_dir[512];
+        const char *home = getenv("HOME");
+        if (home) {
+            snprintf(config_dir, sizeof(config_dir), "%s/.glm-cmd", home);
+            ConversationHistory *history = history_create(config_dir, cfg->memory_rounds);
+            if (history) {
+                history_clear(history);
+                printf("Conversation history cleared successfully.\n");
+                history_destroy(history);
+            }
+        }
+
+        config_destroy(cfg);
         return 0;
     }
 
@@ -270,7 +413,22 @@ int main(int argc, char *argv[]) {
         printf("%s[DEBUG] Conversation History: %d rounds%s\n", COLOR_YELLOW, history->current_count, COLOR_RESET);
     }
 
-    bool success = api_send_request(cfg, sys_info, history, user_input, response);
+    bool success;
+
+    /* 流式输出数据 */
+    StreamUserData stream_data = {0};
+    stream_data.is_streaming = false;
+    stream_data.tty = stdout;
+
+    /* 根据配置选择使用流式或非流式 API */
+    if (cfg->stream_enabled) {
+        /* 使用流式 API */
+        success = api_send_request_stream(cfg, sys_info, history, user_input,
+                                          stream_callback, &stream_data, response);
+    } else {
+        /* 使用非流式 API */
+        success = api_send_request(cfg, sys_info, history, user_input, response);
+    }
 
     if (!success) {
         printf("\n");
@@ -284,14 +442,55 @@ int main(int argc, char *argv[]) {
         system_info_destroy(sys_info);
         if (history) history_destroy(history);
         config_destroy(cfg);
+        if (stream_data.buffer) free(stream_data.buffer);
         return 1;
+    }
+
+    /* 流式模式：从缓冲区提取命令 */
+    if (cfg->stream_enabled && stream_data.buffer) {
+        /* 在缓冲区中查找命令 */
+        const char *cmd_start = strstr(stream_data.buffer, "```bash");
+        const char *cmd_end = NULL;
+
+        if (cmd_start) {
+            cmd_start += strlen("```bash");
+            cmd_end = strstr(cmd_start, "```");
+        }
+
+        if (cmd_start && cmd_end && cmd_end > cmd_start) {
+            size_t cmd_len = cmd_end - cmd_start;
+            char *command = (char *)malloc(cmd_len + 1);
+            if (command) {
+                strncpy(command, cmd_start, cmd_len);
+                command[cmd_len] = '\0';
+
+                /* 去除首尾空白 */
+                char *start = command;
+                char *end = start + cmd_len - 1;
+                while (start < end && (*start == ' ' || *start == '\n' || *start == '\r')) start++;
+                while (end > start && (*end == ' ' || *end == '\n' || *end == '\r')) end--;
+                *(end + 1) = '\0';
+
+                if (start != command) {
+                    memmove(command, start, strlen(start) + 1);
+                }
+
+                /* 设置命令到响应中 */
+                response->command = command;
+            }
+        }
     }
 
     /* 保存对话到历史（如果启用） */
     if (history && response->success && response->command) {
         /* 构建完整的响应文本（包含思考过程和命令） */
         char *full_response = NULL;
-        if (response->thinking_process && strlen(response->thinking_process) > 0) {
+
+        if (cfg->stream_enabled && stream_data.buffer) {
+            /* 流式模式：使用缓冲区内容 */
+            full_response = strdup(stream_data.buffer);
+        } else if (response->thinking_process && strlen(response->thinking_process) > 0) {
+            /* 非流式模式：使用 response 中的内容 */
             size_t len = strlen(response->thinking_process) + strlen(response->command) + 20;
             full_response = (char *)malloc(len);
             if (full_response) {
@@ -309,15 +508,30 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* 显示结果 */
-    printf("\n");
-    if (response->thinking_process) {
-        print_thinking(response->thinking_process);
+    /* 清理流式缓冲区 */
+    if (stream_data.buffer) {
+        free(stream_data.buffer);
+    }
+
+    /* 显示结果（非流式模式需要显示，流式模式已经实时显示了） */
+    if (!cfg->stream_enabled) {
+        printf("\n");
+        if (response->thinking_process) {
+            print_thinking(response->thinking_process);
+        }
+
+        if (response->command) {
+            print_command(response->command);
+        }
+    } else {
+        /* 流式模式：只是显示命令部分的标题 */
+        if (response->command) {
+            printf("\n\n");
+            print_command(response->command);
+        }
     }
 
     if (response->command) {
-        print_command(response->command);
-
         /* 询问是否执行 */
         printf("\n");
         if (ask_confirmation("Do you want to execute this command?")) {

@@ -10,7 +10,7 @@
 
 - **自然语言输入** - 用中文、英文等自然语言描述需求，自动生成对应命令
 - **命令生成** - 将自然语言转换为可执行的 shell 命令
-- **思考过程展示** - 显示命令生成逻辑，便于学习理解
+- **流式输出** - 实时显示 AI 思考过程，响应更快，体验更流畅
 - **对话记忆** - 记住最近的对话历史，支持连续提问和上下文理解
 - **跨平台支持** - 支持 Linux、macOS、Windows
 - **配置文件** - 支持 `~/.glm-cmd/config.ini` 配置
@@ -134,6 +134,9 @@ model="glm-4.7"           # 标准模型
 memory_enabled=true       # 启用对话记忆（默认false）
 memory_rounds=5           # 记住最近5轮对话（默认5）
 
+# 流式输出功能
+stream_enabled=true       # 启用流式输出（默认true）
+
 # 温度参数（0.0-2.0，默认0.7）
 temperature=0.7
 
@@ -219,6 +222,52 @@ glm-cmd "删除所有已合并的本地分支"
 
 ## 高级功能
 
+### 流式输出功能
+
+流式输出功能允许 GLM-CMD 实时显示 AI 的思考过程，无需等待完整响应。
+
+**启用流式输出：**
+
+在配置文件中添加（默认已启用）：
+```ini
+stream_enabled=true
+```
+
+**工作原理：**
+
+- **启用时**：AI 响应逐字/逐句实时显示，体验更流畅
+- **禁用时**：等待完整响应后一次性显示，适合脚本使用
+
+**视觉效果：**
+
+- 蓝色标题：`💭 AI Response:`
+- 灰色内容：思考过程实时显示
+- 绿色命令：最终提取的命令高亮显示
+
+**对比示例：**
+
+```bash
+# 流式输出（stream_enabled=true）
+$ glm-cmd "列出大文件"
+🤔 Processing your request...
+
+💭 AI Response:
+要查找当前目录下所有大于100MB的文件...
+
+⚡ Command: find . -type f -size +100M -exec ls -lh {} \;
+
+# 非流式输出（stream_enabled=false）
+$ glm-cmd "列出大文件"
+🤔 Processing your request...
+[等待响应...]
+
+💭 Thinking Process
+要查找当前目录下所有大于100MB的文件...
+
+⚡ Command
+find . -type f -size +100M -exec ls -lh {} \;
+```
+
 ### 对话记忆功能
 
 对话记忆功能允许 GLM-CMD 记住最近的对话历史，支持连续提问和上下文理解。
@@ -290,6 +339,62 @@ glm-cmd --info
 - 当前配置参数
 - API Key（部分隐藏）
 
+### 对话历史管理
+
+GLM-CMD 支持查看和管理对话历史记录，方便了解之前的查询和 AI 的响应。
+
+**查看对话历史：**
+
+```bash
+# 显示所有保存的对话历史
+glm-cmd --history
+
+# 或使用短选项
+glm-cmd -H
+```
+
+输出示例：
+```
+Conversation History (5 rounds):
+─────────────────────────────────────────
+
+[Round 1]
+User:      查看当前目录所有文件
+Assistant: 用户需要查看当前目录下的"所有文件"...
+Command: ls -la
+
+[Round 2]
+User:      不看隐藏文件
+Assistant: 用户明确要求"不看隐藏文件"...
+Command: ls -l
+
+─────────────────────────────────────────
+```
+
+**清除对话历史：**
+
+```bash
+# 清除所有对话历史
+glm-cmd --clear-history
+
+# 或使用短选项
+glm-cmd -c
+```
+
+**使用场景：**
+
+1. **查看历史**：回顾之前的对话，了解 AI 的响应模式
+2. **清除历史**：当对话内容过多或需要重新开始时清除
+3. **隐私保护**：清除包含敏感信息的对话记录
+4. **调试分析**：查看历史记录，验证记忆功能是否正常工作
+
+**注意事项：**
+
+- 对话历史仅在启用 `memory_enabled=true` 时才会保存
+- 历史记录保存在 `~/.glm-cmd/history.json` 文件中
+- 清除历史是永久性操作，无法恢复
+- 查看历史不需要 API 请求，可离线使用
+
 ### 详细输出模式
 
 ```bash
@@ -327,12 +432,13 @@ glm-cmd "翻译这段文字"
 glm-cmd [OPTIONS] "query"
 
 Options:
-  -h, --help      显示帮助信息
-  -v, --version   显示版本信息
-  -V, --verbose   启用详细输出
-  --info          显示系统信息
-  --init          运行初始化向导
-  -I              同 --init
+  -h, --help          显示帮助信息
+  -v, --version       显示版本信息
+  -V, --verbose       启用详细输出
+  -i, --info          显示系统信息
+  -I, --init          运行初始化向导
+  -H, --history       显示对话历史
+  -c, --clear-history 清除对话历史
 ```
 
 ## 故障排除
@@ -463,6 +569,7 @@ model="glm-4.7"
 user_prompt="请用最简洁的命令"
 memory_enabled=true
 memory_rounds=5
+stream_enabled=true
 temperature=0.7
 max_tokens=2048
 timeout=30

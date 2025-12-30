@@ -230,6 +230,113 @@ char* build_request_body(const Config *cfg, const SystemInfo *sys_info,
     return json_string;
 }
 
+/* 构建请求体（流式模式） */
+char* build_request_body_stream(const Config *cfg, const SystemInfo *sys_info,
+                                 const ConversationHistory *history,
+                                 const char *user_input) {
+    cJSON *json = cJSON_CreateObject();
+    if (!json) {
+        fprintf(stderr, "Error: Failed to create JSON object\n");
+        return NULL;
+    }
+
+    /* 添加 model */
+    cJSON_AddStringToObject(json, "model", cfg->model);
+
+    /* 添加 messages */
+    cJSON *messages = cJSON_CreateArray();
+    if (!messages) {
+        fprintf(stderr, "Error: Failed to create messages array\n");
+        cJSON_Delete(json);
+        return NULL;
+    }
+
+    /* System message */
+    cJSON *system_msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(system_msg, "role", "system");
+
+    char *system_prompt = build_system_prompt(sys_info);
+    if (!system_prompt) {
+        cJSON_Delete(system_msg);
+        cJSON_Delete(messages);
+        cJSON_Delete(json);
+        return NULL;
+    }
+
+    cJSON_AddStringToObject(system_msg, "content", system_prompt);
+    cJSON_AddItemToArray(messages, system_msg);
+
+    /* 添加对话历史 (如果有) */
+    if (history && history->current_count > 0) {
+        if (cfg->verbose) {
+            printf("[DEBUG] Adding %d rounds of conversation history to API request\n", history->current_count);
+        }
+        for (int i = 0; i < history->current_count; i++) {
+            /* 用户消息 */
+            cJSON *hist_user_msg = cJSON_CreateObject();
+            cJSON_AddStringToObject(hist_user_msg, "role", "user");
+            cJSON_AddStringToObject(hist_user_msg, "content", history->rounds[i].user_input);
+            cJSON_AddItemToArray(messages, hist_user_msg);
+
+            /* 助手消息 */
+            cJSON *hist_assist_msg = cJSON_CreateObject();
+            cJSON_AddStringToObject(hist_assist_msg, "role", "assistant");
+            cJSON_AddStringToObject(hist_assist_msg, "content", history->rounds[i].assistant_response);
+            cJSON_AddItemToArray(messages, hist_assist_msg);
+
+            if (cfg->verbose) {
+                printf("[DEBUG] History[%d]: User='%s'\n", i, history->rounds[i].user_input);
+            }
+        }
+    } else {
+        if (cfg->verbose) {
+            printf("[DEBUG] No conversation history to add\n");
+        }
+    }
+
+    /* User message */
+    cJSON *user_msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(user_msg, "role", "user");
+
+    /* 如果有用户自定义提示词,则前置到用户输入 */
+    char *final_content = NULL;
+    if (cfg->user_prompt && strlen(cfg->user_prompt) > 0) {
+        size_t total_len = strlen(cfg->user_prompt) + strlen(user_input) + 4; // +4 for ": " and null terminator
+        final_content = (char *)malloc(total_len);
+        if (final_content) {
+            snprintf(final_content, total_len, "%s: %s", cfg->user_prompt, user_input);
+            cJSON_AddStringToObject(user_msg, "content", final_content);
+            free(final_content);
+        } else {
+            /* 内存分配失败,使用原始输入 */
+            cJSON_AddStringToObject(user_msg, "content", user_input);
+        }
+    } else {
+        cJSON_AddStringToObject(user_msg, "content", user_input);
+    }
+
+    cJSON_AddItemToArray(messages, user_msg);
+    cJSON_AddItemToObject(json, "messages", messages);
+
+    /* 添加 temperature */
+    cJSON_AddNumberToObject(json, "temperature", cfg->temperature);
+
+    /* 添加 max_tokens */
+    cJSON_AddNumberToObject(json, "max_tokens", cfg->max_tokens);
+
+    /* 添加 stream = true (启用流式输出) */
+    cJSON_AddBoolToObject(json, "stream", true);
+
+    /* 转换为字符串 */
+    char *json_string = cJSON_PrintUnformatted(json);
+
+    /* 清理 */
+    free(system_prompt);
+    cJSON_Delete(json);
+
+    return json_string;
+}
+
 bool api_send_request(const Config *cfg, const SystemInfo *sys_info,
                       const ConversationHistory *history,
                       const char *user_input, ApiResponse *response) {
@@ -418,4 +525,204 @@ bool api_send_request(const Config *cfg, const SystemInfo *sys_info,
     curl_global_cleanup();
 
     return response->success;
+}
+
+/* 流式写入回调函数数据结构 */
+typedef struct {
+    StreamCallback callback;
+    void *userdata;
+    char *buffer;
+    size_t buffer_size;
+    size_t buffer_pos;
+    bool is_done;
+} StreamCallbackData;
+
+/* SSE 数据解析辅助函数 */
+static void process_sse_chunk(const char *chunk, size_t chunk_size,
+                              StreamCallbackData *stream_data) {
+    /* 跳过空行和注释 */
+    if (chunk_size == 0 || chunk[0] == '\n' || chunk[0] == '\r' || chunk[0] == ':') {
+        return;
+    }
+
+    /* 查找 "data: " 前缀 */
+    if (strncmp(chunk, "data: ", 6) != 0) {
+        return;
+    }
+
+    const char *json_start = chunk + 6;
+    const char *json_end = memchr(json_start, '\n', chunk_size - 6);
+
+    size_t json_len = json_end ? (json_end - json_start) : (chunk_size - 6);
+
+    /* 检查 [DONE] 标记 */
+    if (json_len >= 6 && strncmp(json_start, "[DONE]", 6) == 0) {
+        stream_data->is_done = true;
+        if (stream_data->callback) {
+            stream_data->callback("", true, stream_data->userdata);
+        }
+        return;
+    }
+
+    /* 解析 JSON 提取 delta.content */
+    char *json_str = (char *)malloc(json_len + 1);
+    if (!json_str) return;
+
+    memcpy(json_str, json_start, json_len);
+    json_str[json_len] = '\0';
+
+    cJSON *json = cJSON_Parse(json_str);
+    free(json_str);
+
+    if (!json) return;
+
+    /* 提取 choices[0].delta.content */
+    cJSON *choices = cJSON_GetObjectItem(json, "choices");
+    if (choices && cJSON_IsArray(choices)) {
+        cJSON *choice = cJSON_GetArrayItem(choices, 0);
+        if (choice) {
+            cJSON *delta = cJSON_GetObjectItem(choice, "delta");
+            if (delta) {
+                cJSON *content = cJSON_GetObjectItem(delta, "content");
+                if (content && cJSON_IsString(content)) {
+                    /* 调用用户回调 */
+                    if (stream_data->callback) {
+                        stream_data->callback(content->valuestring, false, stream_data->userdata);
+                    }
+                }
+            }
+        }
+    }
+
+    cJSON_Delete(json);
+}
+
+/* 流式写入回调函数 */
+static size_t stream_write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    StreamCallbackData *stream_data = (StreamCallbackData *)userp;
+    char *data = (char *)contents;
+
+    /* 逐字符处理，查找 SSE 数据块 */
+    for (size_t i = 0; i < realsize; i++) {
+        /* 将字符添加到缓冲区 */
+        if (stream_data->buffer_pos >= stream_data->buffer_size) {
+            /* 缓冲区扩展 */
+            size_t new_size = stream_data->buffer_size * 2;
+            if (new_size == 0) new_size = 1024;
+            char *new_buffer = (char *)realloc(stream_data->buffer, new_size);
+            if (!new_buffer) {
+                fprintf(stderr, "Error: Failed to realloc stream buffer\n");
+                return 0;
+            }
+            stream_data->buffer = new_buffer;
+            stream_data->buffer_size = new_size;
+        }
+
+        stream_data->buffer[stream_data->buffer_pos++] = data[i];
+
+        /* 检测数据块结束（双换行符） */
+        if (i > 0 && data[i] == '\n' && data[i-1] == '\n') {
+            /* 处理完整的数据块 */
+            process_sse_chunk(stream_data->buffer, stream_data->buffer_pos - 2, stream_data);
+            stream_data->buffer_pos = 0;
+        } else if (data[i] == '\n') {
+            /* 单个换行符，也可能是数据块结束 */
+            if (stream_data->buffer_pos > 1) {
+                process_sse_chunk(stream_data->buffer, stream_data->buffer_pos - 1, stream_data);
+                stream_data->buffer_pos = 0;
+            }
+        }
+    }
+
+    return realsize;
+}
+
+/* 流式 API 请求 */
+bool api_send_request_stream(const Config *cfg, const SystemInfo *sys_info,
+                              const ConversationHistory *history,
+                              const char *user_input, StreamCallback callback,
+                              void *userdata, ApiResponse *response) {
+    if (!cfg || !user_input || !response || !callback) {
+        fprintf(stderr, "Error: Invalid parameters\n");
+        return false;
+    }
+
+    CURL *curl;
+    CURLcode res;
+    struct curl_slist *headers = NULL;
+    StreamCallbackData stream_data = {0};
+
+    /* 初始化流式数据 */
+    stream_data.callback = callback;
+    stream_data.userdata = userdata;
+    stream_data.buffer = NULL;
+    stream_data.buffer_size = 0;
+    stream_data.buffer_pos = 0;
+    stream_data.is_done = false;
+
+    /* 初始化 curl */
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Error: Failed to initialize curl\n");
+        response->error_message = strdup("Failed to initialize curl");
+        return false;
+    }
+
+    /* 构建请求 URL */
+    char url[512];
+    snprintf(url, sizeof(url), "%s/chat/completions", cfg->endpoint);
+
+    /* 构建流式请求体 */
+    char *request_body = build_request_body_stream(cfg, sys_info, history, user_input);
+    if (!request_body) {
+        fprintf(stderr, "Error: Failed to build request body\n");
+        response->error_message = strdup("Failed to build request body");
+        curl_easy_cleanup(curl);
+        curl_global_cleanup();
+        return false;
+    }
+
+    if (cfg->verbose) {
+        printf("\n=== Stream Request ===\n");
+        printf("URL: %s\n", url);
+        printf("Body: %s\n", request_body);
+        printf("====================\n\n");
+    }
+
+    /* 设置 headers */
+    char auth_header[256];
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", cfg->api_key);
+    headers = curl_slist_append(headers, auth_header);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    /* 设置 curl 选项 */
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, stream_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream_data);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, cfg->timeout);
+
+    /* 发送请求 */
+    res = curl_easy_perform(curl);
+
+    /* 清理 */
+    free(request_body);
+    free(stream_data.buffer);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    curl_global_cleanup();
+
+    if (res != CURLE_OK) {
+        fprintf(stderr, "Error: curl_easy_perform() failed: %s\n",
+                curl_easy_strerror(res));
+        response->error_message = strdup(curl_easy_strerror(res));
+        return false;
+    }
+
+    /* 流式请求成功 */
+    response->success = true;
+    return true;
 }

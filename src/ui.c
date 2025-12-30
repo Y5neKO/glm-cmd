@@ -95,8 +95,10 @@ void print_usage(const char *program_name) {
     printf("  -h, --help              Show this help message\n");
     printf("  -v, --version           Show version information\n");
     printf("  -V, --verbose           Enable verbose output\n");
-    printf("  --info                  Show system information\n");
+    printf("  -i, --info              Show system and configuration information\n");
     printf("  -I, --init              Initialize configuration (interactive wizard)\n");
+    printf("  -H, --history           Show conversation history\n");
+    printf("  -c, --clear-history     Clear conversation history\n");
     printf("\n");
     printf("Environment Variables:\n");
     printf("  GLM_CMD_API_KEY         API key for Zhipu AI (required)\n");
@@ -111,6 +113,8 @@ void print_usage(const char *program_name) {
     printf("  %s \"Find processes using port 8080\"\n", program_name);
     printf("  %s \"Rename all files to lowercase\"\n", program_name);
     printf("  %s --init               # Run configuration wizard\n", program_name);
+    printf("  %s --history             # Show conversation history\n", program_name);
+    printf("  %s --clear-history       # Clear conversation history\n", program_name);
     printf("\n");
-    printf("For more information, visit: https://github.com/yourusername/glm-cmd\n");
+    printf("For more information, visit: https://github.com/Y5neKO/glm-cmd\n");
 }

@@ -75,6 +75,7 @@ ConfigFile* config_file_create(void) {
     cfg->user_prompt = NULL;
     cfg->memory_enabled = false;
     cfg->memory_rounds = 5;
+    cfg->stream_enabled = true;
     cfg->temperature = 0.7;
     cfg->max_tokens = 2048;
     cfg->timeout = 30;
@@ -206,6 +207,11 @@ bool config_file_read(const char *path, ConfigFile *cfg) {
             else if (strcmp(key, "memory_rounds") == 0) {
                 cfg->memory_rounds = atoi(unquoted_value);
             }
+            /* Stream Enabled */
+            else if (strcmp(key, "stream_enabled") == 0) {
+                cfg->stream_enabled = (strcmp(unquoted_value, "true") == 0 ||
+                                      strcmp(unquoted_value, "1") == 0);
+            }
             /* Temperature */
             else if (strcmp(key, "temperature") == 0) {
                 cfg->temperature = atof(unquoted_value);
@@ -271,6 +277,11 @@ bool config_file_write(const char *path, const ConfigFile *cfg) {
     fprintf(fp, "# memory_rounds: Number of recent conversation rounds to remember (1-20)\n");
     fprintf(fp, "memory_enabled=%s\n", cfg->memory_enabled ? "true" : "false");
     fprintf(fp, "memory_rounds=%d\n", cfg->memory_rounds);
+    fprintf(fp, "\n");
+
+    fprintf(fp, "# Stream output settings\n");
+    fprintf(fp, "# stream_enabled: Enable/disable streaming output (real-time display)\n");
+    fprintf(fp, "stream_enabled=%s\n", cfg->stream_enabled ? "true" : "false");
     fprintf(fp, "\n");
 
     fprintf(fp, "# Temperature parameter (0.0 - 2.0, default: 0.7)\n");

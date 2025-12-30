@@ -19,6 +19,7 @@ typedef struct {
     char *user_prompt;  /* 用户自定义提示词（前置） */
     bool memory_enabled;  /* 是否启用对话记忆 */
     int memory_rounds;   /* 记忆的对话轮数 */
+    bool stream_enabled; /* 是否启用流式输出 */
     double temperature;
     int max_tokens;
     int timeout;

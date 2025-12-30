@@ -10,7 +10,7 @@ Natural Language to Command Tool - Automatically generate shell commands by desc
 
 - **Natural Language Input** - Describe requirements in Chinese, English, or other natural languages, automatically generate corresponding commands
 - **Command Generation** - Convert natural language into executable shell commands
-- **Thought Process Display** - Show command generation logic for easy learning and understanding
+- **Streaming Output** - Real-time display of AI thinking process, faster response and smoother experience
 - **Conversation Memory** - Remember recent conversation history, support continuous queries and context understanding
 - **Cross-Platform Support** - Support Linux, macOS, Windows
 - **Configuration File** - Support `~/.glm-cmd/config.ini` configuration
@@ -133,6 +133,9 @@ model="glm-4.7"           # Standard model
 memory_enabled=true       # Enable conversation memory (default false)
 memory_rounds=5           # Remember last 5 rounds (default 5)
 
+# Stream output feature
+stream_enabled=true       # Enable streaming output (default true)
+
 # Temperature parameter (0.0-2.0, default 0.7)
 temperature=0.7
 
@@ -218,6 +221,52 @@ glm-cmd "delete all merged local branches"
 
 ## Advanced Features
 
+### Streaming Output Feature
+
+Streaming output feature allows GLM-CMD to display AI responses in real-time, without waiting for the complete response.
+
+**Enable Streaming Output:**
+
+Add to configuration file (enabled by default):
+```ini
+stream_enabled=true
+```
+
+**How It Works:**
+
+- **When enabled**: AI responses appear word-by-word/sentence-by-sentence in real-time, smoother experience
+- **When disabled**: Wait for complete response before displaying, suitable for scripting
+
+**Visual Effects:**
+
+- Blue header: `💭 AI Response:`
+- Gray content: Thinking process displayed in real-time
+- Green command: Final extracted command highlighted
+
+**Comparison Example:**
+
+```bash
+# Streaming output (stream_enabled=true)
+$ glm-cmd "find large files"
+🤔 Processing your request...
+
+💭 AI Response:
+To find all files larger than 100MB in current directory...
+
+⚡ Command: find . -type f -size +100M -exec ls -lh {} \;
+
+# Non-streaming output (stream_enabled=false)
+$ glm-cmd "find large files"
+🤔 Processing your request...
+[Waiting for response...]
+
+💭 Thinking Process
+To find all files larger than 100MB in current directory...
+
+⚡ Command
+find . -type f -size +100M -exec ls -lh {} \;
+```
+
 ### Conversation Memory Feature
 
 The conversation memory feature allows GLM-CMD to remember recent conversation history, supporting continuous queries and context understanding.
@@ -289,6 +338,62 @@ Display content:
 - Current configuration parameters
 - API Key (partially hidden)
 
+### Conversation History Management
+
+GLM-CMD supports viewing and managing conversation history, making it easy to review past queries and AI responses.
+
+**View Conversation History:**
+
+```bash
+# Display all saved conversation history
+glm-cmd --history
+
+# Or use short option
+glm-cmd -H
+```
+
+Output example:
+```
+Conversation History (5 rounds):
+─────────────────────────────────────────
+
+[Round 1]
+User:      list all files in current directory
+Assistant: User needs to list all files in the current directory...
+Command: ls -la
+
+[Round 2]
+User:      don't show hidden files
+Assistant: User explicitly requested "don't show hidden files"...
+Command: ls -l
+
+─────────────────────────────────────────
+```
+
+**Clear Conversation History:**
+
+```bash
+# Clear all conversation history
+glm-cmd --clear-history
+
+# Or use short option
+glm-cmd -c
+```
+
+**Use Cases:**
+
+1. **View History**: Review past conversations and understand AI response patterns
+2. **Clear History**: Clear when conversations become too numerous or need a fresh start
+3. **Privacy Protection**: Clear conversation records containing sensitive information
+4. **Debug Analysis**: View history records to verify memory function is working correctly
+
+**Notes:**
+
+- Conversation history is only saved when `memory_enabled=true` is set
+- History is saved in `~/.glm-cmd/history.json` file
+- Clearing history is a permanent operation and cannot be undone
+- Viewing history does not require API requests and can be used offline
+
 ### Verbose Output Mode
 
 ```bash
@@ -326,12 +431,13 @@ glm-cmd "translate this text"
 glm-cmd [OPTIONS] "query"
 
 Options:
-  -h, --help      Display help information
-  -v, --version   Display version information
-  -V, --verbose   Enable verbose output
-  --info          Display system information
-  --init          Run initialization wizard
-  -I              Same as --init
+  -h, --help          Display help information
+  -v, --version       Display version information
+  -V, --verbose       Enable verbose output
+  -i, --info          Display system information
+  -I, --init          Run initialization wizard
+  -H, --history       Show conversation history
+  -c, --clear-history Clear conversation history
 ```
 
 ## Troubleshooting
@@ -462,6 +568,7 @@ model="glm-4.7"
 user_prompt="Use the most concise command"
 memory_enabled=true
 memory_rounds=5
+stream_enabled=true
 temperature=0.7
 max_tokens=2048
 timeout=30

@@ -23,6 +23,7 @@ Config* config_create(void) {
     cfg->user_prompt = NULL;
     cfg->memory_enabled = DEFAULT_MEMORY_ENABLED;
     cfg->memory_rounds = DEFAULT_MEMORY_ROUNDS;
+    cfg->stream_enabled = DEFAULT_STREAM_ENABLED;
     cfg->temperature = DEFAULT_TEMP;
     cfg->max_tokens = DEFAULT_MAX_TOKENS;
     cfg->timeout = DEFAULT_TIMEOUT;
@@ -66,6 +67,7 @@ static void copy_from_config_file(Config *cfg, const ConfigFile *file_cfg) {
 
     cfg->memory_enabled = file_cfg->memory_enabled;
     cfg->memory_rounds = file_cfg->memory_rounds;
+    cfg->stream_enabled = file_cfg->stream_enabled;
 
     cfg->temperature = file_cfg->temperature;
     cfg->max_tokens = file_cfg->max_tokens;
@@ -241,8 +243,24 @@ void config_print(const Config *cfg) {
     printf("  Max Tokens: %d\n", cfg->max_tokens);
     printf("  Timeout: %d seconds\n", cfg->timeout);
 
+    /* 用户自定义提示词 */
+    if (cfg->user_prompt && strlen(cfg->user_prompt) > 0) {
+        printf("  User Prompt: %s\n", cfg->user_prompt);
+    } else {
+        printf("  User Prompt: (not set)\n");
+    }
+
+    /* 对话记忆功能 */
+    printf("  Memory: %s\n", cfg->memory_enabled ? "enabled" : "disabled");
+    if (cfg->memory_enabled) {
+        printf("  Memory Rounds: %d\n", cfg->memory_rounds);
+    }
+
+    /* 流式输出功能 */
+    printf("  Streaming: %s\n", cfg->stream_enabled ? "enabled" : "disabled");
+
+    /* API Key（隐藏部分） */
     if (cfg->api_key) {
-        /* 隐藏部分 API Key */
         size_t key_len = strlen(cfg->api_key);
         if (key_len > 8) {
             printf("  API Key: %.*s***%s\n", 4, cfg->api_key, cfg->api_key + key_len - 4);
