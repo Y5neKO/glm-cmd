@@ -12,7 +12,7 @@
 - **命令生成** - 将自然语言转换为可执行的 shell 命令
 - **流式输出** - 实时显示 AI 思考过程，响应更快，体验更流畅
 - **对话记忆** - 记住最近的对话历史，支持连续提问和上下文理解
-- **跨平台支持** - 支持 Linux、macOS、Windows
+- **跨平台支持** - 支持 Linux、macOS
 - **配置文件** - 支持 `~/.glm-cmd/config.ini` 配置
 - **一键执行** - 生成后确认即可执行
 
@@ -56,6 +56,8 @@ cd glm-cmd
 # 安装（可选）
 sudo make install
 ```
+
+**Windows 用户**：请使用 WSL（Windows Subsystem for Linux）环境，按照 Linux 方式编译。
 
 ### 3. 初始化配置
 

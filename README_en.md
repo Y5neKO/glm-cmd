@@ -12,7 +12,7 @@ Natural Language to Command Tool - Automatically generate shell commands by desc
 - **Command Generation** - Convert natural language into executable shell commands
 - **Streaming Output** - Real-time display of AI thinking process, faster response and smoother experience
 - **Conversation Memory** - Remember recent conversation history, support continuous queries and context understanding
-- **Cross-Platform Support** - Support Linux, macOS, Windows
+- **Cross-Platform Support** - Support Linux, macOS
 - **Configuration File** - Support `~/.glm-cmd/config.ini` configuration
 - **One-Click Execution** - Confirm and execute generated commands
 
@@ -56,6 +56,8 @@ cd glm-cmd
 # Install (optional)
 sudo make install
 ```
+
+**Windows users**: Please use WSL (Windows Subsystem for Linux) and follow the Linux compilation method.
 
 ### 3. Initialize Configuration
 

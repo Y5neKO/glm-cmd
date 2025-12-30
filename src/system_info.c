@@ -7,7 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+#endif
 
 #ifdef __linux__
     #include <sys/utsname.h>
@@ -18,10 +23,6 @@
     #include <sys/utsname.h>
     #include <sys/sysctl.h>
     #include <TargetConditionals.h>
-#endif
-
-#ifdef _WIN32
-    #include <windows.h>
 #endif
 
 SystemInfo* system_info_create(void) {
@@ -122,8 +123,12 @@ bool system_info_detect(SystemInfo *info) {
     GetNativeSystemInfo(&si);
     if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) {
         info->arch = strdup("x86_64");
-    } else {
+    } else if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64) {
+        info->arch = strdup("arm64");
+    } else if (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {
         info->arch = strdup("x86");
+    } else {
+        info->arch = strdup("unknown");
     }
 #else
     info->os_type = OS_UNKNOWN;
@@ -132,7 +137,7 @@ bool system_info_detect(SystemInfo *info) {
 
     /* 获取主机名 */
 #ifdef _WIN32
-    COMPUTER_NAME_BUFFER size = sizeof(buffer);
+    DWORD size = sizeof(buffer);
     if (GetComputerNameA(buffer, &size)) {
         info->hostname = strdup(buffer);
     }
