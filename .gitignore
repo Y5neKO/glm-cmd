@@ -1,0 +1,34 @@
+# GLM-CMD .gitignore
+
+# 编译产物
+glm-cmd
+glm-cmd.exe
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# 调试文件
+*.dSYM/
+*.su
+*.idb
+*.pdb
+.claude/
+.spec-workflow/
+CLAUDE.md
+
+# 依赖
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 配置（包含敏感信息）
+.env
+*.local
