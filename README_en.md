@@ -20,7 +20,7 @@ Natural Language to Command Tool - Automatically generate shell commands by desc
 
 ### 1. Install Dependencies
 
-> 💡 **Tip**: For detailed dependency installation guide, see [DEPENDENCIES.md](DEPENDENCIES.md)
+> **Tip**: For detailed dependency installation guide, see [DEPENDENCIES.md](DEPENDENCIES.md)
 
 **macOS:**
 ```bash
@@ -239,7 +239,7 @@ stream_enabled=true
 
 **Visual Effects:**
 
-- Blue header: `💭 AI Response:`
+- Blue header: `[*] AI Response:`
 - Gray content: Thinking process displayed in real-time
 - Green command: Final extracted command highlighted
 
@@ -248,22 +248,22 @@ stream_enabled=true
 ```bash
 # Streaming output (stream_enabled=true)
 $ glm-cmd "find large files"
-🤔 Processing your request...
+[*] Processing your request...
 
-💭 AI Response:
+[*] AI Response:
 To find all files larger than 100MB in current directory...
 
-⚡ Command: find . -type f -size +100M -exec ls -lh {} \;
+[Command] find . -type f -size +100M -exec ls -lh {} \;
 
 # Non-streaming output (stream_enabled=false)
 $ glm-cmd "find large files"
-🤔 Processing your request...
+[*] Processing your request...
 [Waiting for response...]
 
-💭 Thinking Process
+[*] Thinking Process
 To find all files larger than 100MB in current directory...
 
-⚡ Command
+[Command]
 find . -type f -size +100M -exec ls -lh {} \;
 ```
 

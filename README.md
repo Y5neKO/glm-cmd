@@ -20,7 +20,7 @@
 
 ### 1. 安装依赖
 
-> 💡 **提示**: 详细的依赖安装指南请参阅 [DEPENDENCIES.md](DEPENDENCIES.md)
+> **提示**: 详细的依赖安装指南请参阅 [DEPENDENCIES.md](DEPENDENCIES.md)
 
 **macOS:**
 ```bash
@@ -240,7 +240,7 @@ stream_enabled=true
 
 **视觉效果：**
 
-- 蓝色标题：`💭 AI Response:`
+- 蓝色标题：`[*] AI Response:`
 - 灰色内容：思考过程实时显示
 - 绿色命令：最终提取的命令高亮显示
 
@@ -249,22 +249,22 @@ stream_enabled=true
 ```bash
 # 流式输出（stream_enabled=true）
 $ glm-cmd "列出大文件"
-🤔 Processing your request...
+[*] Processing your request...
 
-💭 AI Response:
+[*] AI Response:
 要查找当前目录下所有大于100MB的文件...
 
-⚡ Command: find . -type f -size +100M -exec ls -lh {} \;
+[Command] find . -type f -size +100M -exec ls -lh {} \;
 
 # 非流式输出（stream_enabled=false）
 $ glm-cmd "列出大文件"
-🤔 Processing your request...
+[*] Processing your request...
 [等待响应...]
 
-💭 Thinking Process
+[*] Thinking Process
 要查找当前目录下所有大于100MB的文件...
 
-⚡ Command
+[Command]
 find . -type f -size +100M -exec ls -lh {} \;
 ```
 

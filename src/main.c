@@ -81,7 +81,7 @@ static void stream_callback(const char *content, bool is_done, void *userdata) {
 
     /* 实时显示内容（使用 \r 覆盖当前行） */
     if (!data->is_streaming) {
-        printf("%s💭 AI Response:%s\n", COLOR_BLUE, COLOR_RESET);
+        printf("%s[*] AI Response:%s\n", COLOR_BLUE, COLOR_RESET);
         data->is_streaming = true;
     }
 
@@ -406,7 +406,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("%s🤔 Processing your request...%s\n\n", COLOR_BLUE, COLOR_RESET);
+    printf("%s[*] Processing your request...%s\n\n", COLOR_BLUE, COLOR_RESET);
 
     /* 调试: 显示历史状态 */
     if (cfg->verbose && history) {
@@ -536,13 +536,13 @@ int main(int argc, char *argv[]) {
         printf("\n");
         if (ask_confirmation("Do you want to execute this command?")) {
             printf("\n");
-            printf("%s▶️ Executing command...%s\n\n", COLOR_GREEN, COLOR_RESET);
+            printf("%s[>] Executing command...%s\n\n", COLOR_GREEN, COLOR_RESET);
             int ret = system(response->command);
             printf("\n");
             if (ret == 0) {
                 print_success("Command executed successfully");
             } else {
-                printf("%s⚠️  Command exited with code: %d%s\n",
+                printf("%s[!] Command exited with code: %d%s\n",
                        COLOR_YELLOW, ret, COLOR_RESET);
             }
         } else {
