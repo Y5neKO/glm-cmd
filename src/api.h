@@ -11,12 +11,19 @@
 #include "history.h"
 #include <stdbool.h>
 
+/* 流式内容类型枚举 */
+typedef enum {
+    STREAM_CONTENT_REASONING,  /* 思考过程 (reasoning_content) */
+    STREAM_CONTENT_ANSWER,     /* 最终回答 (content) */
+    STREAM_CONTENT_DONE        /* 流式结束标记 */
+} StreamContentType;
+
 /* 流式回调函数类型
  * content: 接收到的内容片段
- * is_done: 是否为最后一个片段
+ * content_type: 内容类型（思考过程/最终回答/结束）
  * userdata: 用户自定义数据
  */
-typedef void (*StreamCallback)(const char *content, bool is_done, void *userdata);
+typedef void (*StreamCallback)(const char *content, StreamContentType content_type, void *userdata);
 
 /* API 响应结构体 */
 typedef struct {

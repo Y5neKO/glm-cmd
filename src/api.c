@@ -399,7 +399,16 @@ bool api_send_request(const Config *cfg, const SystemInfo *sys_info,
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &write_data);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, cfg->timeout);
+
+    /* 超时设置：使用低速超时而非总时间超时 */
+    /* 如果传输速度低于 1 byte/s 持续 cfg->timeout 秒，则判定为超时 */
+    /* 这样可以在有数据流时允许长时间运行 */
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);  /* 1 byte/s */
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, cfg->timeout);
+
+    /* 设置总体最大超时时间为配置值的 10 倍（作为安全网） */
+    /* 防止异常情况下无限等待 */
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, cfg->timeout * 10L);
 
     /* 发送请求 */
     res = curl_easy_perform(curl);
@@ -566,7 +575,7 @@ static void process_sse_chunk(const char *chunk, size_t chunk_size,
     if (json_len >= 6 && strncmp(json_start, "[DONE]", 6) == 0) {
         stream_data->is_done = true;
         if (stream_data->callback) {
-            stream_data->callback("", true, stream_data->userdata);
+            stream_data->callback("", STREAM_CONTENT_DONE, stream_data->userdata);
         }
         return;
     }
@@ -583,18 +592,32 @@ static void process_sse_chunk(const char *chunk, size_t chunk_size,
 
     if (!json) return;
 
-    /* 提取 choices[0].delta.content */
+    /* 提取 choices[0].delta */
     cJSON *choices = cJSON_GetObjectItem(json, "choices");
     if (choices && cJSON_IsArray(choices)) {
         cJSON *choice = cJSON_GetArrayItem(choices, 0);
         if (choice) {
             cJSON *delta = cJSON_GetObjectItem(choice, "delta");
             if (delta) {
-                cJSON *content = cJSON_GetObjectItem(delta, "content");
-                if (content && cJSON_IsString(content)) {
-                    /* 调用用户回调 */
+                /* 优先处理 reasoning_content (思考过程) */
+                cJSON *reasoning_content = cJSON_GetObjectItem(delta, "reasoning_content");
+                if (reasoning_content && cJSON_IsString(reasoning_content) &&
+                    strlen(reasoning_content->valuestring) > 0) {
+                    /* 调用用户回调 - 思考过程 */
                     if (stream_data->callback) {
-                        stream_data->callback(content->valuestring, false, stream_data->userdata);
+                        stream_data->callback(reasoning_content->valuestring,
+                                            STREAM_CONTENT_REASONING, stream_data->userdata);
+                    }
+                }
+
+                /* 处理 content (最终回答) */
+                cJSON *content = cJSON_GetObjectItem(delta, "content");
+                if (content && cJSON_IsString(content) &&
+                    strlen(content->valuestring) > 0) {
+                    /* 调用用户回调 - 最终回答 */
+                    if (stream_data->callback) {
+                        stream_data->callback(content->valuestring,
+                                            STREAM_CONTENT_ANSWER, stream_data->userdata);
                     }
                 }
             }
@@ -710,7 +733,16 @@ bool api_send_request_stream(const Config *cfg, const SystemInfo *sys_info,
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, stream_write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream_data);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, cfg->timeout);
+
+    /* 超时设置：使用低速超时而非总时间超时 */
+    /* 如果传输速度低于 1 byte/s 持续 cfg->timeout 秒，则判定为超时 */
+    /* 这样可以在有数据流时允许长时间运行（支持长时间推理） */
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);  /* 1 byte/s */
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, cfg->timeout);
+
+    /* 设置总体最大超时时间为配置值的 10 倍（作为安全网） */
+    /* 防止异常情况下无限等待 */
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, cfg->timeout * 10L);
 
     /* 发送请求 */
     res = curl_easy_perform(curl);

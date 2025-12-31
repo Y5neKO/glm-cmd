@@ -11,7 +11,7 @@
 /* 默认配置 */
 #define DEFAULT_MODEL "glm-4.7"
 #define DEFAULT_TEMP 0.7
-#define DEFAULT_MAX_TOKENS 2048
+#define DEFAULT_MAX_TOKENS 8192  /* 增加到 8192 以支持详细推理过程 */
 #define DEFAULT_TIMEOUT 30
 #define DEFAULT_MEMORY_ENABLED false
 #define DEFAULT_MEMORY_ROUNDS 5

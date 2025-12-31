@@ -30,64 +30,102 @@
 
 /* 流式输出数据结构 */
 typedef struct {
-    char *buffer;           /* 累积的响应内容 */
-    size_t buffer_size;     /* 缓冲区大小 */
-    size_t buffer_pos;      /* 当前位置 */
-    bool is_streaming;      /* 是否正在流式输出 */
-    FILE *tty;              /* 终端文件描述符 */
+    char *reasoning_buffer;      /* 思考过程缓冲区 */
+    size_t reasoning_size;       /* 思考过程缓冲区大小 */
+    size_t reasoning_pos;        /* 思考过程当前位置 */
+
+    char *answer_buffer;         /* 最终回答缓冲区 */
+    size_t answer_size;          /* 最终回答缓冲区大小 */
+    size_t answer_pos;           /* 最终回答当前位置 */
+
+    bool reasoning_started;      /* 思考过程是否已开始 */
+    bool answer_started;         /* 最终回答是否已开始 */
+    FILE *tty;                   /* 终端文件描述符 */
 } StreamUserData;
 
+/* 辅助函数：追加内容到缓冲区 */
+static void append_to_buffer(char **buffer, size_t *buffer_size,
+                            size_t *buffer_pos, const char *content) {
+    size_t content_len = strlen(content);
+
+    /* 初始化缓冲区（如果需要） */
+    if (*buffer == NULL) {
+        *buffer_size = 4096;
+        *buffer = (char *)malloc(*buffer_size);
+        if (!*buffer) {
+            fprintf(stderr, "Error: Failed to allocate buffer\n");
+            return;
+        }
+        *buffer_pos = 0;
+        (*buffer)[0] = '\0';
+    }
+
+    /* 扩展缓冲区（如果需要） */
+    while (*buffer_pos + content_len + 1 >= *buffer_size) {
+        size_t new_size = *buffer_size * 2;
+        char *new_buffer = (char *)realloc(*buffer, new_size);
+        if (!new_buffer) {
+            fprintf(stderr, "Error: Failed to realloc buffer\n");
+            return;
+        }
+        *buffer = new_buffer;
+        *buffer_size = new_size;
+    }
+
+    /* 追加内容到缓冲区 */
+    strcat(*buffer + *buffer_pos, content);
+    *buffer_pos += content_len;
+}
+
 /* 流式回调函数 */
-static void stream_callback(const char *content, bool is_done, void *userdata) {
+static void stream_callback(const char *content, StreamContentType content_type, void *userdata) {
     StreamUserData *data = (StreamUserData *)userdata;
 
-    if (is_done) {
-        /* 流式输出结束 */
-        if (data->is_streaming) {
+    /* 处理流式结束标记 */
+    if (content_type == STREAM_CONTENT_DONE) {
+        if (data->reasoning_started || data->answer_started) {
             printf("\n\n");
-            data->is_streaming = false;
         }
         return;
     }
 
-    /* 初始化缓冲区 */
-    if (data->buffer == NULL) {
-        data->buffer_size = 4096;
-        data->buffer = (char *)malloc(data->buffer_size);
-        if (!data->buffer) {
-            fprintf(stderr, "Error: Failed to allocate stream buffer\n");
-            return;
+    /* 处理思考过程 */
+    if (content_type == STREAM_CONTENT_REASONING) {
+        append_to_buffer(&data->reasoning_buffer, &data->reasoning_size,
+                        &data->reasoning_pos, content);
+
+        /* 显示标题（仅首次） */
+        if (!data->reasoning_started) {
+            printf("%s[✿ Thinking Process]%s\n", COLOR_CYAN, COLOR_RESET);
+            data->reasoning_started = true;
         }
-        data->buffer_pos = 0;
-        data->buffer[0] = '\0';
+
+        /* 流式输出思考过程（灰色） */
+        printf("%s%s%s", COLOR_GRAY, content, COLOR_RESET);
+        fflush(stdout);
+        return;
     }
 
-    /* 扩展缓冲区（如果需要） */
-    size_t content_len = strlen(content);
-    while (data->buffer_pos + content_len + 1 >= data->buffer_size) {
-        size_t new_size = data->buffer_size * 2;
-        char *new_buffer = (char *)realloc(data->buffer, new_size);
-        if (!new_buffer) {
-            fprintf(stderr, "Error: Failed to realloc stream buffer\n");
-            return;
+    /* 处理最终回答 */
+    if (content_type == STREAM_CONTENT_ANSWER) {
+        append_to_buffer(&data->answer_buffer, &data->answer_size,
+                        &data->answer_pos, content);
+
+        /* 显示标题（仅首次） */
+        if (!data->answer_started) {
+            /* 如果思考过程已结束，先添加换行 */
+            if (data->reasoning_started) {
+                printf("\n");
+            }
+            printf("%s[✓ Generated Answer]%s\n", COLOR_GREEN, COLOR_RESET);
+            data->answer_started = true;
         }
-        data->buffer = new_buffer;
-        data->buffer_size = new_size;
+
+        /* 流式输出最终回答（黄色） */
+        printf("%s%s%s", COLOR_YELLOW, content, COLOR_RESET);
+        fflush(stdout);
+        return;
     }
-
-    /* 追加内容到缓冲区 */
-    strcat(data->buffer + data->buffer_pos, content);
-    data->buffer_pos += content_len;
-
-    /* 实时显示内容（使用 \r 覆盖当前行） */
-    if (!data->is_streaming) {
-        printf("%s[*] AI Response:%s\n", COLOR_BLUE, COLOR_RESET);
-        data->is_streaming = true;
-    }
-
-    /* 直接输出内容（流式显示，使用灰色） */
-    printf("%s%s%s", COLOR_GRAY, content, COLOR_RESET);
-    fflush(stdout);
 }
 
 /* 打印版本信息 */
@@ -417,7 +455,10 @@ int main(int argc, char *argv[]) {
 
     /* 流式输出数据 */
     StreamUserData stream_data = {0};
-    stream_data.is_streaming = false;
+    stream_data.reasoning_buffer = NULL;
+    stream_data.answer_buffer = NULL;
+    stream_data.reasoning_started = false;
+    stream_data.answer_started = false;
     stream_data.tty = stdout;
 
     /* 根据配置选择使用流式或非流式 API */
@@ -442,26 +483,64 @@ int main(int argc, char *argv[]) {
         system_info_destroy(sys_info);
         if (history) history_destroy(history);
         config_destroy(cfg);
-        if (stream_data.buffer) free(stream_data.buffer);
+        if (stream_data.reasoning_buffer) free(stream_data.reasoning_buffer);
+        if (stream_data.answer_buffer) free(stream_data.answer_buffer);
         return 1;
     }
 
-    /* 流式模式：从缓冲区提取命令 */
-    if (cfg->stream_enabled && stream_data.buffer) {
-        /* 在缓冲区中查找命令 */
-        const char *cmd_start = strstr(stream_data.buffer, "```bash");
-        const char *cmd_end = NULL;
-
-        if (cmd_start) {
-            cmd_start += strlen("```bash");
-            cmd_end = strstr(cmd_start, "```");
+    /* 流式模式：从 answer_buffer 提取命令 */
+    if (cfg->stream_enabled && stream_data.answer_buffer) {
+        if (cfg->verbose) {
+            printf("[DEBUG] answer_buffer size: %zu bytes\n", stream_data.answer_pos);
+            printf("[DEBUG] answer_buffer content preview (first 500 chars):\n%.500s\n[DEBUG END]\n",
+                   stream_data.answer_buffer);
         }
 
-        if (cmd_start && cmd_end && cmd_end > cmd_start) {
-            size_t cmd_len = cmd_end - cmd_start;
+        /* 在回答缓冲区中查找最后一个命令块（更可靠） */
+        const char *last_cmd_start = NULL;
+        const char *last_cmd_end = NULL;
+        const char *search_pos = stream_data.answer_buffer;
+
+        /* 查找所有 ```bash 块，取最后一个 */
+        while (true) {
+            const char *cmd_start = strstr(search_pos, "```bash");
+            if (!cmd_start) break;
+
+            cmd_start += strlen("```bash");  /* 跳过标记本身 */
+            const char *cmd_end = strstr(cmd_start, "```");
+
+            if (cmd_end && cmd_end > cmd_start) {
+                /* 找到一个有效的代码块，记录它 */
+                last_cmd_start = cmd_start;
+                last_cmd_end = cmd_end;
+                search_pos = cmd_end + 3;  /* 继续搜索 */
+            } else if (cmd_start) {
+                /* 找到了开始但没有结束标记 - 可能是不完整的响应 */
+                /* 检查 cmd_start 后面是否有实际内容 */
+                const char *content_start = cmd_start;
+                while (content_start < cmd_start + 100 && *content_start &&
+                       (*content_start == ' ' || *content_start == '\n' || *content_start == '\r')) {
+                    content_start++;
+                }
+
+                if (*content_start && content_start < stream_data.answer_buffer + stream_data.answer_pos) {
+                    /* 有内容但没有结束标记，使用到最后作为命令 */
+                    last_cmd_start = cmd_start;
+                    last_cmd_end = stream_data.answer_buffer + stream_data.answer_pos;
+                    if (cfg->verbose) {
+                        printf("[DEBUG] Found unclosed code block, using remaining content\n");
+                        printf("[DEBUG] Command preview: %.200s\n", cmd_start);
+                    }
+                }
+                break;
+            }
+        }
+
+        if (last_cmd_start && last_cmd_end && last_cmd_end > last_cmd_start) {
+            size_t cmd_len = last_cmd_end - last_cmd_start;
             char *command = (char *)malloc(cmd_len + 1);
             if (command) {
-                strncpy(command, cmd_start, cmd_len);
+                strncpy(command, last_cmd_start, cmd_len);
                 command[cmd_len] = '\0';
 
                 /* 去除首尾空白 */
@@ -475,8 +554,24 @@ int main(int argc, char *argv[]) {
                     memmove(command, start, strlen(start) + 1);
                 }
 
-                /* 设置命令到响应中 */
-                response->command = command;
+                /* 验证命令不为空且有效 */
+                if (strlen(start) > 0) {
+                    /* 设置命令到响应中 */
+                    response->command = command;
+                    if (cfg->verbose) {
+                        printf("[DEBUG] Successfully extracted command: %s\n", command);
+                    }
+                } else {
+                    if (cfg->verbose) {
+                        printf("[DEBUG] Extracted command is empty after trimming\n");
+                    }
+                    free(command);
+                }
+            }
+        } else {
+            if (cfg->verbose) {
+                printf("[DEBUG] No valid ```bash code block found in answer_buffer\n");
+                printf("[DEBUG] Searched for '```bash' but found none or incomplete\n");
             }
         }
     }
@@ -486,9 +581,31 @@ int main(int argc, char *argv[]) {
         /* 构建完整的响应文本（包含思考过程和命令） */
         char *full_response = NULL;
 
-        if (cfg->stream_enabled && stream_data.buffer) {
-            /* 流式模式：使用缓冲区内容 */
-            full_response = strdup(stream_data.buffer);
+        if (cfg->stream_enabled && (stream_data.reasoning_buffer || stream_data.answer_buffer)) {
+            /* 流式模式：组合思考过程和回答 */
+            size_t total_len = 1;  /* 至少包含 null 终止符 */
+            if (stream_data.reasoning_buffer) {
+                total_len += strlen(stream_data.reasoning_buffer) + 20;  /* +20 for labels */
+            }
+            if (stream_data.answer_buffer) {
+                total_len += strlen(stream_data.answer_buffer) + 20;
+            }
+
+            full_response = (char *)malloc(total_len);
+            if (full_response) {
+                full_response[0] = '\0';
+                if (stream_data.reasoning_buffer) {
+                    strcat(full_response, "Thinking: ");
+                    strcat(full_response, stream_data.reasoning_buffer);
+                }
+                if (stream_data.answer_buffer) {
+                    if (stream_data.reasoning_buffer) {
+                        strcat(full_response, "\n\n");
+                    }
+                    strcat(full_response, "Answer: ");
+                    strcat(full_response, stream_data.answer_buffer);
+                }
+            }
         } else if (response->thinking_process && strlen(response->thinking_process) > 0) {
             /* 非流式模式：使用 response 中的内容 */
             size_t len = strlen(response->thinking_process) + strlen(response->command) + 20;
@@ -509,8 +626,11 @@ int main(int argc, char *argv[]) {
     }
 
     /* 清理流式缓冲区 */
-    if (stream_data.buffer) {
-        free(stream_data.buffer);
+    if (stream_data.reasoning_buffer) {
+        free(stream_data.reasoning_buffer);
+    }
+    if (stream_data.answer_buffer) {
+        free(stream_data.answer_buffer);
     }
 
     /* 显示结果（非流式模式需要显示，流式模式已经实时显示了） */
