@@ -96,7 +96,7 @@ static void stream_callback(const char *content, StreamContentType content_type,
 
         /* 显示标题（仅首次） */
         if (!data->reasoning_started) {
-            printf("%s[✿ Thinking Process]%s\n", COLOR_CYAN, COLOR_RESET);
+            printf("%s[* Thinking Process]%s\n", COLOR_CYAN, COLOR_RESET);
             data->reasoning_started = true;
         }
 
@@ -117,7 +117,7 @@ static void stream_callback(const char *content, StreamContentType content_type,
             if (data->reasoning_started) {
                 printf("\n");
             }
-            printf("%s[✓ Generated Answer]%s\n", COLOR_GREEN, COLOR_RESET);
+            printf("%s[+] Generated Answer%s\n", COLOR_GREEN, COLOR_RESET);
             data->answer_started = true;
         }
 

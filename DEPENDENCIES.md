@@ -160,8 +160,8 @@ brew install cjson
 
 ```bash
 # 检查 pkg-config 能否找到库
-pkg-config --exists libcurl && echo "✓ libcurl found" || echo "✗ libcurl not found"
-pkg-config --exists cjson && echo "✓ cjson found" || echo "✗ cjson not found"
+pkg-config --exists libcurl && echo "[+] libcurl found" || echo "[-] libcurl not found"
+pkg-config --exists cjson && echo "[+] cjson found" || echo "[-] cjson not found"
 
 # 或使用 make 提供的检查命令
 make check-deps

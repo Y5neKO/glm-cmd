@@ -9,10 +9,12 @@ Natural Language to Command Tool - Automatically generate shell commands by desc
 ## Key Features
 
 - **Natural Language Input** - Describe requirements in Chinese, English, or other natural languages, automatically generate corresponding commands
-- **Command Generation** - Convert natural language into executable shell commands
+- **Thinking Process Visualization** - Real-time display of AI reasoning process, understand how commands are generated
+- **Intelligent Command Generation** - Convert natural language into executable shell commands
 - **Streaming Output** - Real-time display of AI thinking process, faster response and smoother experience
+- **Long Reasoning Support** - Support deep reasoning over 60 seconds without timeout limitations
 - **Conversation Memory** - Remember recent conversation history, support continuous queries and context understanding
-- **Cross-Platform Support** - Support Linux, macOS
+- **Cross-Platform Support** - Support Linux, macOS, Windows (WSL)
 - **Configuration File** - Support `~/.glm-cmd/config.ini` configuration
 - **One-Click Execution** - Confirm and execute generated commands
 
@@ -71,7 +73,7 @@ Follow the prompts to enter:
 2. **Endpoint Selection** - Recommend Coding endpoint (specialized for command generation)
 3. **Model Name** - Such as `glm-4.7`, `glm-4-plus`, etc.
 4. **Temperature Parameter** - Control randomness, default 0.7
-5. **Max Tokens** - Response length, default 2048
+5. **Max Tokens** - Response length, default 8192
 6. **Timeout** - Request timeout, default 30 seconds
 
 ### 4. Usage Examples
@@ -141,8 +143,8 @@ stream_enabled=true       # Enable streaming output (default true)
 # Temperature parameter (0.0-2.0, default 0.7)
 temperature=0.7
 
-# Max tokens (default 2048)
-max_tokens=2048
+# Max tokens (default 8192, supports detailed reasoning process)
+max_tokens=8192
 
 # Timeout (seconds, default 30)
 timeout=30
@@ -223,6 +225,102 @@ glm-cmd "delete all merged local branches"
 
 ## Advanced Features
 
+### Thinking Process Visualization
+
+GLM-CMD now supports real-time display of AI's thinking process (reasoning_content), allowing you to understand how commands are generated.
+
+**How It Works:**
+
+When GLM-CMD uses the Zhipu AI Coding endpoint, the API returns two types of content:
+- **Thinking Process** (reasoning_content): AI's logical reasoning for analyzing requirements and building commands
+- **Final Answer** (content): Final command and explanation after thinking
+
+**Visual Effects:**
+
+```
+[* Thinking Process]
+User wants to find all files larger than 100MB in current directory...
+Need to use find command, parameter -type f means find files...
+-size +100M means larger than 100MB...
+-exec ls -lh {} \; for displaying detailed file information...
+
+[+] Generated Answer
+To find all files larger than 100MB in current directory and display detailed information, use:
+
+```bash
+find . -type f -size +100M -exec ls -lh {} \;
+```
+
+[Command] find . -type f -size +100M -exec ls -lh {} \;
+```
+
+- **Cyan header** `[* Thinking Process]`: Start of thinking process
+- **Gray text**: Real-time reasoning content
+- **Green header** `[+] Generated Answer`: Start of final answer
+- **Yellow text**: Final answer content (including command explanation)
+- **Green command**: Final extracted executable command
+
+**Configuration:**
+
+Thinking process visualization is enabled by default, requires using Zhipu AI Coding endpoint:
+
+```ini
+# Use Coding endpoint (supports thinking process)
+endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
+
+# Streaming output (enabled by default, for real-time display)
+stream_enabled=true
+```
+
+### Long Reasoning Support
+
+GLM-CMD now supports long deep reasoning without traditional timeout limitations.
+
+**Technical Implementation:**
+
+Traditional timeout mechanism (`CURLOPT_TIMEOUT`) limits the total request duration, causing deep thinking processes to be incorrectly interrupted. GLM-CMD uses **data flow timeout** mechanism:
+
+```ini
+# Timeout configuration (based on data flow)
+timeout=30  # Only timeout if no data received for 30 seconds
+```
+
+**How It Works:**
+
+- **Traditional timeout**: Interrupts after 30 seconds regardless of data reception
+- **Data flow timeout**: No timeout as long as data is continuously received
+
+This means even if AI thinks for 60 seconds, 120 seconds or longer, the request won't be interrupted as long as data continues to be returned.
+
+**Safety Net Mechanism:**
+
+To prevent true deadlocks, GLM-CMD sets a total timeout of 10x the configured time as a safety net:
+
+```ini
+timeout=30   # Data flow timeout: 30 seconds without data
+# Actual total timeout: 300 seconds (30 * 10)
+```
+
+**Configuration Examples:**
+
+```ini
+# Default configuration (recommended)
+timeout=30
+
+# Complex tasks (allow longer silent periods)
+timeout=60
+
+# Simple tasks (fail fast)
+timeout=15
+```
+
+**Use Cases:**
+
+- Complex command generation (requires multi-step reasoning)
+- Large-scale file operation analysis
+- Complex regular expression construction
+- Multi-step system management tasks
+
 ### Streaming Output Feature
 
 Streaming output feature allows GLM-CMD to display AI responses in real-time, without waiting for the complete response.
@@ -241,8 +339,11 @@ stream_enabled=true
 
 **Visual Effects:**
 
-- Blue header: `[*] AI Response:`
-- Gray content: Thinking process displayed in real-time
+- Blue header: `[*] Processing your request...`
+- Cyan header `[* Thinking Process]`: Thinking process start
+- Gray text: Real-time reasoning content
+- Green header `[+] Generated Answer`: Final answer start
+- Yellow text: Final answer content
 - Green command: Final extracted command highlighted
 
 **Comparison Example:**
@@ -252,8 +353,13 @@ stream_enabled=true
 $ glm-cmd "find large files"
 [*] Processing your request...
 
-[*] AI Response:
+[* Thinking Process]
+User wants to find large files...
+(thinking process displayed in real-time)
+
+[+] Generated Answer
 To find all files larger than 100MB in current directory...
+(final answer displayed in real-time)
 
 [Command] find . -type f -size +100M -exec ls -lh {} \;
 
@@ -264,6 +370,7 @@ $ glm-cmd "find large files"
 
 [*] Thinking Process
 To find all files larger than 100MB in current directory...
+[displayed all at once]
 
 [Command]
 find . -type f -size +100M -exec ls -lh {} \;
@@ -572,7 +679,7 @@ memory_enabled=true
 memory_rounds=5
 stream_enabled=true
 temperature=0.7
-max_tokens=2048
+max_tokens=8192
 timeout=30
 ```
 
@@ -583,7 +690,7 @@ api_key="sk.your_actual_api_key_here"
 endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 model="glm-4-plus"
 temperature=0.5
-max_tokens=4096
+max_tokens=8192
 timeout=60
 ```
 

@@ -9,10 +9,12 @@
 ## 主要功能
 
 - **自然语言输入** - 用中文、英文等自然语言描述需求，自动生成对应命令
-- **命令生成** - 将自然语言转换为可执行的 shell 命令
+- **思考过程可视化** - 实时显示 AI 推理过程，了解命令生成逻辑
+- **智能命令生成** - 将自然语言转换为可执行的 shell 命令
 - **流式输出** - 实时显示 AI 思考过程，响应更快，体验更流畅
+- **长时间推理支持** - 支持 60 秒以上的深度推理，不受超时限制
 - **对话记忆** - 记住最近的对话历史，支持连续提问和上下文理解
-- **跨平台支持** - 支持 Linux、macOS
+- **跨平台支持** - 支持 Linux、macOS、Windows (WSL)
 - **配置文件** - 支持 `~/.glm-cmd/config.ini` 配置
 - **一键执行** - 生成后确认即可执行
 
@@ -142,8 +144,8 @@ stream_enabled=true       # 启用流式输出（默认true）
 # 温度参数（0.0-2.0，默认0.7）
 temperature=0.7
 
-# 最大token数（默认2048）
-max_tokens=2048
+# 最大token数（默认8192，支持详细推理过程）
+max_tokens=8192
 
 # 超时时间（秒，默认30）
 timeout=30
@@ -224,9 +226,105 @@ glm-cmd "删除所有已合并的本地分支"
 
 ## 高级功能
 
+### 思考过程可视化
+
+GLM-CMD 现在支持实时显示 AI 的思考过程 (reasoning_content)，让您了解命令是如何生成的。
+
+**工作原理：**
+
+GLM-CMD 使用智谱 AI Coding 端点时，API 会返回两种内容：
+- **思考过程** (reasoning_content): AI 分析需求、构建命令的逻辑推理
+- **最终回答** (content): 经过思考后生成的最终命令和说明
+
+**视觉效果：**
+
+```
+[* Thinking Process]
+用户想要查找当前目录下所有大于100MB的文件...
+需要使用 find 命令，参数 -type f 表示查找文件...
+-size +100M 表示大于100MB...
+-exec ls -lh {} \; 用于显示详细文件信息...
+
+[+] Generated Answer
+要查找当前目录下所有大于100MB的文件并显示详细信息，可以使用以下命令：
+
+```bash
+find . -type f -size +100M -exec ls -lh {} \;
+```
+
+[Command] find . -type f -size +100M -exec ls -lh {} \;
+```
+
+- **青色标题** `[* Thinking Process]`: 思考过程开始
+- **灰色文本**: 实时显示的推理内容
+- **绿色标题** `[+] Generated Answer`: 最终回答开始
+- **黄色文本**: 最终回答内容（包含命令说明）
+- **绿色命令**: 最终提取的可执行命令
+
+**配置：**
+
+思考过程可视化功能默认启用，需要使用智谱 AI Coding 端点：
+
+```ini
+# 使用 Coding 端点（支持思考过程）
+endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
+
+# 流式输出（默认启用，用于实时显示）
+stream_enabled=true
+```
+
+### 长时间推理支持
+
+GLM-CMD 现在支持长时间深度推理，不受传统超时限制。
+
+**技术实现：**
+
+传统超时机制 (`CURLOPT_TIMEOUT`) 限制整个请求的总时长，这会导致深度思考过程被错误中断。GLM-CMD 改用**数据流超时**机制：
+
+```ini
+# 超时配置（基于数据流）
+timeout=30  # 如果 30 秒内没有接收到任何数据，才判定为超时
+```
+
+**工作原理：**
+
+- **传统超时**: 30秒后无论是否在接收数据都会中断
+- **数据流超时**: 只要持续接收数据就不会超时
+
+这意味着即使 AI 思考 60 秒、120 秒甚至更长时间，只要持续返回数据，请求就不会被中断。
+
+**安全网机制：**
+
+为了防止真正的死锁，GLM-CMD 设置了 10 倍于配置时间的总超时作为安全网：
+
+```ini
+timeout=30   # 数据流超时：30秒无数据
+# 实际总超时：300秒 (30 * 10)
+```
+
+**配置示例：**
+
+```ini
+# 默认配置（推荐）
+timeout=30
+
+# 复杂任务（允许更长的静默期）
+timeout=60
+
+# 简单任务（快速失败）
+timeout=15
+```
+
+**适用场景：**
+
+- 复杂命令生成（需要多步推理）
+- 大规模文件操作分析
+- 复杂的正则表达式构建
+- 多步骤系统管理任务
+
 ### 流式输出功能
 
-流式输出功能允许 GLM-CMD 实时显示 AI 的思考过程，无需等待完整响应。
+流式输出功能允许 GLM-CMD 实时显示 AI 的响应，无需等待完整生成。
 
 **启用流式输出：**
 
@@ -240,12 +338,6 @@ stream_enabled=true
 - **启用时**：AI 响应逐字/逐句实时显示，体验更流畅
 - **禁用时**：等待完整响应后一次性显示，适合脚本使用
 
-**视觉效果：**
-
-- 蓝色标题：`[*] AI Response:`
-- 灰色内容：思考过程实时显示
-- 绿色命令：最终提取的命令高亮显示
-
 **对比示例：**
 
 ```bash
@@ -253,18 +345,24 @@ stream_enabled=true
 $ glm-cmd "列出大文件"
 [*] Processing your request...
 
-[*] AI Response:
+[* Thinking Process]
+用户想要查找大文件...
+(思考过程实时显示)
+
+[+] Generated Answer
 要查找当前目录下所有大于100MB的文件...
+(最终回答实时显示)
 
 [Command] find . -type f -size +100M -exec ls -lh {} \;
 
 # 非流式输出（stream_enabled=false）
 $ glm-cmd "列出大文件"
 [*] Processing your request...
-[等待响应...]
+[等待完整响应...]
 
 [*] Thinking Process
 要查找当前目录下所有大于100MB的文件...
+[一次性显示]
 
 [Command]
 find . -type f -size +100M -exec ls -lh {} \;
@@ -573,7 +671,7 @@ memory_enabled=true
 memory_rounds=5
 stream_enabled=true
 temperature=0.7
-max_tokens=2048
+max_tokens=8192
 timeout=30
 ```
 
@@ -584,7 +682,7 @@ api_key="sk.your_actual_api_key_here"
 endpoint="https://open.bigmodel.cn/api/coding/paas/v4"
 model="glm-4-plus"
 temperature=0.5
-max_tokens=4096
+max_tokens=8192
 timeout=60
 ```
 
