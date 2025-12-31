@@ -6,6 +6,8 @@
 
 自然语言转命令工具 - 用自然语言描述需求，自动生成 shell 命令
 
+[![asciicast](https://asciinema.org/a/tj1tZYDTH5lFNffkg674nr9Gv.svg)](https://asciinema.org/a/tj1tZYDTH5lFNffkg674nr9Gv)
+
 ## 主要功能
 
 - **自然语言输入** - 用中文、英文等自然语言描述需求，自动生成对应命令

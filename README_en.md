@@ -6,6 +6,8 @@
 
 Natural Language to Command Tool - Automatically generate shell commands by describing requirements in natural language
 
+[![asciicast](https://asciinema.org/a/tj1tZYDTH5lFNffkg674nr9Gv.svg)](https://asciinema.org/a/tj1tZYDTH5lFNffkg674nr9Gv)
+
 ## Key Features
 
 - **Natural Language Input** - Describe requirements in Chinese, English, or other natural languages, automatically generate corresponding commands
